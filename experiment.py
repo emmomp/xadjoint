@@ -10,10 +10,12 @@ import numpy as np
 import glob
 import xmitgcm
 from inputs import mydirs
+from inputs import adj_dict
 import xarray as xr
+import ecco_v4_python as ecco
 
 class Exp(object):
-    def __init__(self,rootdir,exp_dir,start_date,lag0):
+    def __init__(self,rootdir,exp_dir,start_date,lag0,deltat=3600.):
         self.root_dir = rootdir
         # assign expt directory
         self.exp_dir = rootdir+mydirs['exp_dirs']+exp_dir
@@ -21,8 +23,8 @@ class Exp(object):
         if not os.path.isdir(self.exp_dir):
             raise ValueError('Experiment directory '+self.exp_dir+' not found')
                         
-        self.start_date=start_date
-        self.lag0=lag0
+        self.start_date=np.datetime64(start_date)
+        self.lag0=np.datetime64(lag0)
         
         # Find its
         with open(self.exp_dir+'/its_ad.txt') as f:
@@ -32,9 +34,10 @@ class Exp(object):
         self.dates=np.empty(self.nits,dtype='datetime64[D]')
         self.lag_days=np.empty(self.nits)
         self.lag_years=np.empty(self.nits)
+        self.deltat=deltat
         for i in range(self.nits):
             self.its[i]=int(itin[i])
-            self.dates[i]=start_date+np.timedelta64(int(self.its[i]/24),'D')
+            self.dates[i]=start_date+np.timedelta64(int(self.its[i]*self.deltat),'s')
             self.lag_days[i]=(self.dates[i]-lag0)/np.timedelta64(1,'D')
             self.lag_years[i]=self.lag_days[i]/365.25
         del itin             
@@ -80,19 +83,63 @@ class Exp(object):
         datasets = []
         for var in var_list:
             print('Reading in '+var)
-            if var in self.ADJ_vars:
-                var_ds= xmitgcm.open_mdsdataset(data_dir=self.exp_dir,grid_dir=self.root_dir+mydirs['grid_dir'],prefix=[var,],geometry='llc')
+            if adj_dict[var]['adjtype'] == 'ADJ':
+                if adj_dict[var]['vartype']=='c':
+                    if adj_dict[var]['ndims']==3:
+                        dims=['k','j','i']
+                    elif adj_dict[var]['ndims']==2:
+                        dims=['j','i']
+                    else:
+                        raise ValueError('Ndims of variables must be 2 or 3')
+                elif adj_dict[var]['vartype']=='w':
+                    if adj_dict[var]['ndims']==3:
+                        dims=['k','j','i_g']
+                    elif adj_dict[var]['ndims']==2:
+                        dims=['j','i_g']
+                    else:
+                        raise ValueError('Ndims of variables must be 2 or 3')
+                elif adj_dict[var]['vartype']=='s':
+                    if adj_dict[var]['ndims']==3:
+                        dims=['k','j_g','i']
+                    elif adj_dict[var]['ndims']==2:
+                        dims=['j_g','i']
+                    else:
+                        raise ValueError('Ndims of variables must be 2 or 3')
+                elif adj_dict[var]['vartype']=='z':
+                    if adj_dict[var]['ndims']==3:
+                        dims=['k','j_g','i_g']
+                    elif adj_dict[var]['ndims']==2:
+                        dims=['j_g','i_g']
+                    else:
+                        raise ValueError('Ndims of variables must be 2 or 3')
+                else:
+                    print('No vartype found, variable must be defined in available_diagnostics.log')
+                if dims is not None:
+                    extra_variable=dict(dims=dims,attrs=dict(standard_name=var,long_name='Sensitivity to '+adj_dict[var]['longname'],units='[J]/'+adj_dict[var]['units']))
+                    var_ds= xmitgcm.open_mdsdataset(data_dir=self.exp_dir,grid_dir=self.root_dir+mydirs['grid_dir'],
+                                                prefix=[var,],geometry='llc',delta_t=self.deltat,ref_date=self.start_date,
+                                                extra_variable=extra_variable,read_grid=False)
+                else:
+                    var_ds= xmitgcm.open_mdsdataset(data_dir=self.exp_dir,grid_dir=self.root_dir+mydirs['grid_dir'],
+                                                prefix=[var,],geometry='llc',delta_t=self.deltat,ref_date=self.start_date,
+                                                read_grid=False)                    
                 datasets.append(var_ds)
                 del var_ds
             elif var in self.adxx_vars:
                 var_data= xmitgcm.utils.read_3d_llc_data(fname=self.exp_dir+'/'+var+'.0000000012.data',nz=1,nx=90,nrecs=self.nits,dtype='>f4') 
-                grid_ds = xmitgcm.open_mdsdataset(iters=None, read_grid=True,geometry='llc',prefix=var,data_dir=self.exp_dir,grid_dir=self.root_dir+mydirs['grid_dir'])
-                var_1 = xmitgcm.open_mdsdataset(data_dir=self.exp_dir,grid_dir=self.root_dir+mydirs['grid_dir'],prefix=[var,],geometry='llc')
-                vardims = var_1[var].dims
-                newcords = {k: grid_ds[k] for k in vardims[1:]} #exclude time here
-                newcords['time']=self.its
-                var_ds = xr.Dataset(data_vars={var:(vardims,var_data)},coords=newcords)
-                var_ds = xr.combine_by_coords([grid_ds,var_ds])
+                if adj_dict[var]['ndims']==3:
+                    var_ds=ecco.llc_tiles_to_xda(var_data, var_type=adj_dict[var]['vartype'],dim4='depth', dim5='time')
+                elif adj_dict[var]['ndims']==2:
+                    var_ds=ecco.llc_tiles_to_xda(var_data, var_type=adj_dict[var]['vartype'],dim4='time')
+                else:
+                    raise ValueError('Ndims of variables must be 2 or 3')
+                #grid_ds = xmitgcm.open_mdsdataset(iters=None, read_grid=True,geometry='llc',prefix=var,data_dir=self.exp_dir,grid_dir=self.root_dir+mydirs['grid_dir'])
+                #var_1 = xmitgcm.open_mdsdataset(data_dir=self.exp_dir,grid_dir=self.root_dir+mydirs['grid_dir'],prefix=[var,],geometry='llc')
+                #vardims = var_1[var].dims
+                #newcords = {k: grid_ds[k] for k in vardims[1:]} #exclude time here
+                #newcords['time']=self.its
+                #var_ds = xr.Dataset(data_vars={var:(vardims,var_data)},coords=newcords)
+                #var_ds = xr.combine_by_coords([grid_ds,var_ds])
                 datasets.append(var_ds)
                 del var_ds,var_data,grid_ds,newcords,vardims,var_1
             else:
