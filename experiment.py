@@ -139,7 +139,7 @@ class Exp(object):
             raise TypeError('sigma should be a dictionary')
         
 # Tests            
-#myexp = Exp('/data/smurphs/emmomp/orchestra/','run_ad.8yr.SOpv.00.atl',start_date=np.datetime64('1993-01-01'),lag0=np.datetime64('2000-07-01'))
+#myexp = Exp('/data/smurphs/emmomp/orchestra/','run_ad.8yr.SOpv3.00.atl',start_date=np.datetime64('1993-01-01'),lag0=np.datetime64('2000-07-01'))
 #print(vars(myexp))
 #myexp = Exp('murphs','run')
 #myexp = Exp('smurphs','run_ad.CORE2.5yr.1mosssrelax_k500_mergesss')
