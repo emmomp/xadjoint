@@ -12,13 +12,13 @@ import xmitgcm
 from inputs import adxx_it
 from inputs import adj_dict
 import xarray as xr
-import ecco_v4_python as ecco
+import ecco_v4_py as ecco
 
 class Exp(object):
     '''
     Representation of specific MITgcm adjoint experiment run in ECCOv4
     '''
-    def __init__(self,grid_dir,exp_dir,start_date,lag0,deltat=3600.):
+    def __init__(self,grid_dir,exp_dir,start_date,lag0,deltat=3600):
         '''
         Initialise Exp object based on user data
 
@@ -44,7 +44,7 @@ class Exp(object):
         #Assign time info                  
         self.start_date=np.datetime64(start_date)
         self.lag0=np.datetime64(lag0)
-        self.deltat=deltat
+        self.deltat=int(deltat)
         
         # Generate various time dimensions
         self.time_data=_get_time_data(self.exp_dir,self.start_date,self.lag0,self.deltat)
@@ -59,7 +59,7 @@ class Exp(object):
         '''
         # find all ADJ meta files at first it
         self.ADJ_vars=[]
-        allADJ = [os.path.basename(x) for x in glob.glob(self.exp_dir+'/ADJ*'+'{:010.0f}'.format(self.its[0])+'.meta')]
+        allADJ = [os.path.basename(x) for x in glob.glob(self.exp_dir+'/ADJ*'+'{:010.0f}'.format(self.time_data['its'][0])+'.meta')]
         for item in allADJ:
             #i1 = item.find('ADJ')
             i2 = item.find('.')
@@ -69,7 +69,8 @@ class Exp(object):
         
         # find all adxx meta files
         all_vars=[]
-        alladxx = [os.path.basename(x) for x in glob.glob(self.exp_dir+'/adxx_*'+'{010.0f}'.format(adxx_it)+'.meta')]
+        alladxx = [os.path.basename(x) for x in glob.glob(self.exp_dir+'/adxx_*'+'{:010.0f}'.format(adxx_it)+'.meta')]
+
         for item in alladxx:
             #i1 = item.find('adxx')
             i2 = item.find('.')
@@ -127,13 +128,13 @@ class Exp(object):
                         extra_variable=dict(dims=dims,attrs=dict(standard_name=var,long_name='Sensitivity to '+adj_dict[var]['longname'],units='[J]/'+adj_dict[var]['units']))
                         var_ds= xmitgcm.open_mdsdataset(data_dir=self.exp_dir,grid_dir=self.grid_dir,
                                                     prefix=[var,],geometry='llc',delta_t=self.deltat,ref_date=self.start_date,
-                                                    extra_variable=extra_variable,read_grid=False)
+                                                    extra_variables=extra_variable,read_grid=False)
 
                 elif var in self.adxx_vars:
                     if adj_dict[var]['ndims']==3:
-                        var_data= xmitgcm.utils.read_3d_llc_data(fname=self.exp_dir+'/'+var+'.'+'{010.0f}'.format(adxx_it)+'.data',nz=50,nx=90,nrecs=self.nits,dtype='>f4') 
+                        var_data= xmitgcm.utils.read_3d_llc_data(fname=self.exp_dir+'/'+var+'.'+'{:010.0f}'.format(adxx_it)+'.data',nz=50,nx=90,nrecs=self.time_data['nits'],dtype='>f4') 
                     elif adj_dict[var]['ndims']==2:
-                        var_data= xmitgcm.utils.read_3d_llc_data(fname=self.exp_dir+'/'+var+'.'+'{010.0f}'.format(adxx_it)+'.data',nz=1,nx=90,nrecs=self.nits,dtype='>f4') 
+                        var_data= xmitgcm.utils.read_3d_llc_data(fname=self.exp_dir+'/'+var+'.'+'{:010.0f}'.format(adxx_it)+'.data',nz=1,nx=90,nrecs=self.time_data['nits'],dtype='>f4') 
                     else:
                         raise ValueError('Ndims of variables must be 2 or 3')
                     if isinstance(adj_dict[var]['vartype'],str):
@@ -205,7 +206,7 @@ class Exp(object):
 def _get_time_data(exp_dir,start_date,lag0,deltat) :   
     
     tdata={}
-    with open(exp_dir+'/its_ad.txt') as f:
+    with open(exp_dir+'its_ad.txt') as f:
         itin = f.readlines()
     nits=len(itin)
     tdata['nits'] = nits   
@@ -245,7 +246,7 @@ def _add_metadata(var_ds,var):
     return var_ds
         
 # Tests   
-rootdir = '/data/emmomp/orchestra/'
+rootdir = '/data/smurphs/emmomp/orchestra/'
 griddir = rootdir+'grid2/'
 
 expdir = rootdir+'experiments/run_ad.8yr.SOpv3.00.atl/'
