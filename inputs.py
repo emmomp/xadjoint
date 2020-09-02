@@ -34,14 +34,15 @@ Standard elements:
                 Or if a list must be 2D or 3D, and follow the ECCO_v4_py dimension labelling format:
                     e.g. ['k','j','i'] is a central 3D variable like a tracer
                     e.g. ['j_g','i'] is a south 2D variable like a surface meridional velocity
-                    See https://ecco-v4-python-tutorial.readthedocs.io/ for more info                
+                    See https://ecco-v4-python-tutorial.readthedocs.io/ for more info  
+                NB info in available_diagnostics.log will take precedence over vartype for ADJ variables
     'ndims': Number of dimensions of root variable. 2 for surface fields, 3 for full depth fields.                 
     
 Optional elements:    
     'longname' : Descriptive name of root variable. 
     'units' : Units of root variable.
     'fact' : Scalar factor to multiply by when calculating stats.
-    'ECCOname': Name of root variable in ECCO.  
+    'ECCOname': Name of root variable in ECCO.  s
 
 '''
 
@@ -55,7 +56,7 @@ adj_dict = \
           'ndims':3,
           'longname':'Potential Temperature',
           'units':'Degree C',
-          'sig0':0.3,
+          'fact':0.3,
           },
          
      'ADJsalt':
@@ -66,7 +67,28 @@ adj_dict = \
           'ndims':3,
           'longname':'Salinity',
           'units':'psu',
-          'sig0':0.07,
+          'fact':0.07,
+          },
+         
+     'ADJaqh':
+         {'adjtype':'ADJ',
+          'varlabel':'$q$',
+          'ECCOname':'EXFaqh',
+          'vartype':['j','i'],
+          'ndims':2,
+          'longname':'Specific Humidity',
+          'units':'kg/kg',
+          'fact':1.,
+          },
+         
+     'ADJqnet':
+         {'adjtype':'ADJ',
+          'varlabel':'$Q_{net}$',
+          'ECCOname':'EXFqnet',
+          'ndims':2,
+          'longname':'Net Heat Flux',
+          'units':'W/m^2',
+          'fact':60.,
           },
 
      'ADJqnet':
@@ -88,7 +110,7 @@ adj_dict = \
           'ndims':2,
           'longname':'Evaporation-Precipitation-Runoff',
           'units':'m/s',
-          'sig0':2.0e-8,
+          'fact':2.0e-8,
           },
          
      'adxx_qnet':
@@ -99,29 +121,30 @@ adj_dict = \
           'ndims':2,
           'longname':'Net Heat Flux',
           'units':'W/m^2',
-          'sig0':60.,
+          'fact':60.,
           },
          
      'adxx_tauu':
          {'adjtype':'adxx',
           'varlabel':'$\\tau_U$',
           'ECCOname':'EXFtaue',
-          'vartype':'w',
+#          'vartype':'w',
+          'vartype':['j','i_g'],
           'ndims':2,
           'longname':'Zonal Wind Stress',
           'units':'N/m^2',
-          'sig0':0.08,
+          'fact':0.08,
           },
          
      'adxx_tauv':
          {'adjtype':'adxx',
           'varlabel':'$\\tau_V$',
           'ECCOname':'EXFtaun',
-          'vartype':'s',
+ #         'vartype':'s',
           'ndims':2,
           'longname':'Meridional Wind Stress',
           'units':'N/m^2',
-          'sig0':0.06,
+          'fact':0.06,
           },
          
      'adxx_uwind':
@@ -132,7 +155,7 @@ adj_dict = \
           'ndims':2,
           'longname':'Zonal Wind',
           'units':'m/s',
-          'sig0':1.6,
+          'fact':1.6,
           },
          
      'adxx_vwind':
@@ -143,7 +166,7 @@ adj_dict = \
           'ndims':2,
           'longname':'Meridional Wind',
           'units':'m/s',
-          'sig0':1.6,
+          'fact':1.6,
           }     
      
      }

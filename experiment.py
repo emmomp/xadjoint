@@ -32,7 +32,7 @@ class Exp(object):
             Start date of simulation in 'YYYY-MM-DD' format.
         lag0 : string
             Lag 0 for cost function definedin *_maskT file
-        deltat : double, optional
+        deltat : int, optional
             Time step of forward model in seconds. The default is 3600. (one day).        
 
         '''
@@ -59,7 +59,7 @@ class Exp(object):
         '''
         # find all ADJ meta files at first it
         self.ADJ_vars=[]
-        allADJ = [os.path.basename(x) for x in glob.glob(self.exp_dir+'/ADJ*'+'{:010.0f}'.format(self.time_data['its'][0])+'.meta')]
+        allADJ = [os.path.basename(x) for x in glob.glob(self.exp_dir+'ADJ*'+'{:010.0f}'.format(self.time_data['its'][0])+'.meta')]
         for item in allADJ:
             #i1 = item.find('ADJ')
             i2 = item.find('.')
@@ -69,8 +69,7 @@ class Exp(object):
         
         # find all adxx meta files
         all_vars=[]
-        alladxx = [os.path.basename(x) for x in glob.glob(self.exp_dir+'/adxx_*'+'{:010.0f}'.format(adxx_it)+'.meta')]
-
+        alladxx = [os.path.basename(x) for x in glob.glob(self.exp_dir+'adxx_*'+'{:010.0f}'.format(adxx_it)+'.meta')]
         for item in alladxx:
             #i1 = item.find('adxx')
             i2 = item.find('.')
@@ -258,5 +257,5 @@ print(vars(myexp))
 
 #myexp = Exp('smurphs','run_ad.CORE2.5yr.1mosssrelax_k500_mergesss')
 #myexp.find_results()
-myexp.load_vars(['ADJqnet','adxx_tauu'])
+myexp.load_vars(['ADJqnet','ADJaqh','adxx_tauu','adxx_tauv','adxx_qnet','ADJsalt'])
 #myexp.load_vars(['adxx_tauu',])
