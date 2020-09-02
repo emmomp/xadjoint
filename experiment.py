@@ -127,13 +127,13 @@ class Exp(object):
                         extra_variable=dict(dims=dims,attrs=dict(standard_name=var,long_name='Sensitivity to '+adj_dict[var]['longname'],units='[J]/'+adj_dict[var]['units']))
                         var_ds= xmitgcm.open_mdsdataset(data_dir=self.exp_dir,grid_dir=self.grid_dir,
                                                     prefix=[var,],geometry='llc',delta_t=self.deltat,ref_date=self.start_date,
-                                                    extra_variable=extra_variable,read_grid=False)
+                                                    extra_variables=extra_variable,read_grid=False)
 
                 elif var in self.adxx_vars:
                     if adj_dict[var]['ndims']==3:
-                        var_data= xmitgcm.utils.read_3d_llc_data(fname=self.exp_dir+'/'+var+'.'+'{010.0f}'.format(adxx_it)+'.data',nz=50,nx=90,nrecs=self.nits,dtype='>f4') 
+                        var_data= xmitgcm.utils.read_3d_llc_data(fname=self.exp_dir+'/'+var+'.'+'{:010.0f}'.format(adxx_it)+'.data',nz=50,nx=90,nrecs=self.time_data['nits'],dtype='>f4') 
                     elif adj_dict[var]['ndims']==2:
-                        var_data= xmitgcm.utils.read_3d_llc_data(fname=self.exp_dir+'/'+var+'.'+'{010.0f}'.format(adxx_it)+'.data',nz=1,nx=90,nrecs=self.nits,dtype='>f4') 
+                        var_data= xmitgcm.utils.read_3d_llc_data(fname=self.exp_dir+'/'+var+'.'+'{:010.0f}'.format(adxx_it)+'.data',nz=1,nx=90,nrecs=self.time_data['nits'],dtype='>f4') 
                     else:
                         raise ValueError('Ndims of variables must be 2 or 3')
                     if isinstance(adj_dict[var]['vartype'],str):
@@ -257,5 +257,5 @@ print(vars(myexp))
 
 #myexp = Exp('smurphs','run_ad.CORE2.5yr.1mosssrelax_k500_mergesss')
 #myexp.find_results()
-myexp.load_vars(['ADJqnet','adxx_tauu'])
+myexp.load_vars(['ADJqnet','ADJaqh','adxx_tauu','adxx_tauv','adxx_qnet','ADJsalt'])
 #myexp.load_vars(['adxx_tauu',])
