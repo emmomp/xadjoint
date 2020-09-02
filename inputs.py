@@ -5,26 +5,14 @@ Created on Sat Dec 21 15:35:26 2019
 
 @author: emmomp
 
-Define directories for inputs and outputs
 """
-mydirs = \
-    {
-     # Where grid data can be found
-     'grid_dir':'../orchestra/grid2/',
-     # Where experiment folders can be found
-     'exp_dirs':'experiments/',
-     # Where plots saved
-     'plot_dir':'plots/',
-     # Where stats saved
-     'stats_dir':'data_out/',
-     # Where 3d stdev fields are binary llc format
-     '3dstdev_dir': '../orchestra/other_data/ecco_stdvs_anoms/'
-    }
-# Scaling for ADJ files (duration of one ctrl period / duration of one timestep) 
-ADJ_scale=1209600/3600;
-# Cost function scaling
-fc_scale=1e9;
 
+# Scaling for ADJ files (duration of one ctrl period / duration of one timestep) 
+ADJ_scale=1209600./3600.;
+# Cost function scaling (mult_gencost in data.ecco). Set to 1 if not used.
+fc_scale=1.0e9;
+# adxx iter number. Iteration label for adxx files. i.e. expects files of the form adxx_[var].0000000012.data/meta
+adxx_it=12;
 '''
 Define information for each adjoint sensitivity field to be used. Here the 
 'sensitivity variable' refers to the sensitivity field, wheras the 'root variable'
@@ -36,21 +24,24 @@ Standard elements:
     Name in dictionary should be called the same as the first element of the filename, eg 'ADJtheta' or 'adxx_qnet'.
     'adjtype': Should be either ADJ [one field per timestep] or adxx [all timesteps in one file].
     'varlabel': Label for root variable, used in figures.
-    'vartype' : One of 'c','w','s' or 'z' to describe grid location of variable. 
-                'c' is a central variable like temperature, tracer
-                'w' is a west variable like zonal velocity
-                's' is a south variable like meridional velocity
-                'z' is a corner variable like vorticity
-                See help(ecco.llc_tiles_to_xda) for more info
-    'ndims': Number of dimensions of root variable. E.g. 2 for surface fields, 3 for full depth fields.
-    'ECCOname': OPTIONAL Name of root variable in ECCO, used to copy dimensions of field
-                If not defined, you must add details of the variable to your copy of available_diagnostics.log
+    'vartype' : Must be either grid location, list of dimensions, or [ADJ variables only] left empty if in available_diagnostics.log
+                If location, must be one of:
+                    'c' is a central variable like temperature, tracer
+                    'w' is a west variable like zonal velocity
+                    's' is a south variable like meridional velocity
+                    'z' is a corner variable like vorticity
+                    See help(ecco.llc_tiles_to_xda) for more info
+                Or if a list must be 2D or 3D, and follow the ECCO_v4_py dimension labelling format:
+                    e.g. ['k','j','i'] is a central 3D variable like a tracer
+                    e.g. ['j_g','i'] is a south 2D variable like a surface meridional velocity
+                    See https://ecco-v4-python-tutorial.readthedocs.io/ for more info                
+    'ndims': Number of dimensions of root variable. 2 for surface fields, 3 for full depth fields.                 
     
 Optional elements:    
-    'longname' : Descriptive name of root variable.
+    'longname' : Descriptive name of root variable. 
     'units' : Units of root variable.
     'fact' : Scalar factor to multiply by when calculating stats.
-
+    'ECCOname': Name of root variable in ECCO.  
 
 '''
 
