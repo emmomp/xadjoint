@@ -85,6 +85,7 @@ adj_dict = \
          {'adjtype':'ADJ',
           'varlabel':'$Q_{net}$',
           'ECCOname':'EXFqnet',
+          'vartype':'c',
           'ndims':2,
           'longname':'Net Heat Flux',
           'units':'W/m^2',
