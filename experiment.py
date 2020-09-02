@@ -123,11 +123,13 @@ class Exp(object):
                         var_ds= xmitgcm.open_mdsdataset(data_dir=self.exp_dir,grid_dir=self.grid_dir,
                                                     prefix=[var,],geometry='llc',delta_t=self.deltat,ref_date=self.start_date,
                                                     read_grid=False)   
+                        var_ds=var_ds.rename({'face':'tile'})
                     else:                             
-                        extra_variable=dict(dims=dims,attrs=dict(standard_name=var,long_name='Sensitivity to '+adj_dict[var]['longname'],units='[J]/'+adj_dict[var]['units']))
+                        extra_variable={var:dict(dims=dims,attrs=dict(standard_name=var,long_name='Sensitivity to '+adj_dict[var]['longname'],units='[J]/'+adj_dict[var]['units']))}
                         var_ds= xmitgcm.open_mdsdataset(data_dir=self.exp_dir,grid_dir=self.grid_dir,
                                                     prefix=[var,],geometry='llc',delta_t=self.deltat,ref_date=self.start_date,
                                                     extra_variables=extra_variable,read_grid=False)
+                        var_ds=var_ds.rename({'face':'tile'})
 
                 elif var in self.adxx_vars:
                     if adj_dict[var]['ndims']==3:
@@ -143,14 +145,18 @@ class Exp(object):
                             var_ds=ecco.llc_tiles_to_xda(var_data, var_type=adj_dict[var]['vartype'],dim4='time')
                         else:
                             raise ValueError('Ndims of variables must be 2 or 3')
+                        var_ds=xr.Dataset(data_vars={var:var_ds},coords=var_ds.coords)
+                        var_ds['time']=self.time_data['dates']
                     elif dims==[]:
                         raise ValueError('Vartype must be defined for adxx fields')
                     else:
                         grid_ds = xmitgcm.open_mdsdataset(iters=None,read_grid=True,geometry='llc',prefix=var,data_dir=self.exp_dir,grid_dir=self.grid_dir)
-                        dims=['tile',]+dims
-                        newcoords = {k: grid_ds[k] for k in dims} 
-                        newcoords['time']=self.tdata['dates']
-                        var_ds=xr.DataSet(data_vars={var:(dims,var_data)},coords=newcoords)
+                        dims=['face',]+dims
+                        newcoords = {k: grid_ds[k] for k in dims}
+                        dims=['time',]+dims 
+                        newcoords['time']=self.time_data['dates']
+                        var_ds=xr.Dataset(data_vars={var:(dims,var_data)},coords=newcoords)
+                        var_ds=var_ds.rename({'face':'tile'})
                         del newcoords,grid_ds
                     var_ds=_add_metadata(var_ds,var)
                             
