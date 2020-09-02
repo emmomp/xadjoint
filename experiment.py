@@ -113,40 +113,54 @@ class Exp(object):
             datasets = []
             for var in var_list:
                 print('Reading in '+var)
-                dims=_parse_vartype(adj_dict[var]['vartype'])
+                if 'vartype' in adj_dict[var].keys():
+                    dims=_parse_vartype(adj_dict[var]['vartype'],adj_dict[var]['ndims'])  
+                else:
+                    dims=[]
                 
-                if adj_dict[var]['adjtype'] == 'ADJ':
-                    
-                    if dims is not None:
+                if adj_dict[var]['adjtype'] == 'ADJ':                    
+                    if dims == []:
+                        var_ds= xmitgcm.open_mdsdataset(data_dir=self.exp_dir,grid_dir=self.grid_dir,
+                                                    prefix=[var,],geometry='llc',delta_t=self.deltat,ref_date=self.start_date,
+                                                    read_grid=False)   
+                    else:                             
                         extra_variable=dict(dims=dims,attrs=dict(standard_name=var,long_name='Sensitivity to '+adj_dict[var]['longname'],units='[J]/'+adj_dict[var]['units']))
-                        var_ds= xmitgcm.open_mdsdataset(data_dir=self.exp_dir,grid_dir=self.root_dir+mydirs['grid_dir'],
+                        var_ds= xmitgcm.open_mdsdataset(data_dir=self.exp_dir,grid_dir=self.grid_dir,
                                                     prefix=[var,],geometry='llc',delta_t=self.deltat,ref_date=self.start_date,
                                                     extra_variable=extra_variable,read_grid=False)
-                    else:
-                        var_ds= xmitgcm.open_mdsdataset(data_dir=self.exp_dir,grid_dir=self.root_dir+mydirs['grid_dir'],
-                                                    prefix=[var,],geometry='llc',delta_t=self.deltat,ref_date=self.start_date,
-                                                    read_grid=False)                    
-                    datasets.append(var_ds)
-                    del var_ds
+
                 elif var in self.adxx_vars:
-                    var_data= xmitgcm.utils.read_3d_llc_data(fname=self.exp_dir+'/'+var+'.0000000012.data',nz=1,nx=90,nrecs=self.nits,dtype='>f4') 
                     if adj_dict[var]['ndims']==3:
-                        var_ds=ecco.llc_tiles_to_xda(var_data, var_type=adj_dict[var]['vartype'],dim4='depth', dim5='time')
+                        var_data= xmitgcm.utils.read_3d_llc_data(fname=self.exp_dir+'/'+var+'.'+'{010.0f}'.format(adxx_it)+'.data',nz=50,nx=90,nrecs=self.nits,dtype='>f4') 
                     elif adj_dict[var]['ndims']==2:
-                        var_ds=ecco.llc_tiles_to_xda(var_data, var_type=adj_dict[var]['vartype'],dim4='time')
+                        var_data= xmitgcm.utils.read_3d_llc_data(fname=self.exp_dir+'/'+var+'.'+'{010.0f}'.format(adxx_it)+'.data',nz=1,nx=90,nrecs=self.nits,dtype='>f4') 
                     else:
                         raise ValueError('Ndims of variables must be 2 or 3')
-                    #grid_ds = xmitgcm.open_mdsdataset(iters=None, read_grid=True,geometry='llc',prefix=var,data_dir=self.exp_dir,grid_dir=self.root_dir+mydirs['grid_dir'])
-                    #var_1 = xmitgcm.open_mdsdataset(data_dir=self.exp_dir,grid_dir=self.root_dir+mydirs['grid_dir'],prefix=[var,],geometry='llc')
-                    #vardims = var_1[var].dims
-                    #newcords = {k: grid_ds[k] for k in vardims[1:]} #exclude time here
-                    #newcords['time']=self.its
+                    if isinstance(adj_dict[var]['vartype'],str):
+                        if adj_dict[var]['ndims']==3:
+                            var_ds=ecco.llc_tiles_to_xda(var_data, var_type=adj_dict[var]['vartype'],dim4='depth', dim5='time')
+                        elif adj_dict[var]['ndims']==2:
+                            var_ds=ecco.llc_tiles_to_xda(var_data, var_type=adj_dict[var]['vartype'],dim4='time')
+                        else:
+                            raise ValueError('Ndims of variables must be 2 or 3')
+                    elif dims==[]:
+                        raise ValueError('Vartype must be defined for adxx fields')
+                    else:
+                        grid_ds = xmitgcm.open_mdsdataset(iters=None,read_grid=True,geometry='llc',prefix=var,data_dir=self.exp_dir,grid_dir=self.grid_dir)
+                        dims=['tile',]+dims
+                        newcoords = {k: grid_ds[k] for k in dims} 
+                        newcoords['time']=self.tdata['dates']
+                        var_ds=xr.DataSet(data_vars={var:(dims,var_data)},coords=newcoords)
+                        del newcoords,grid_ds
+                    var_ds=_add_metadata(var_ds,var)
+                            
                     #var_ds = xr.Dataset(data_vars={var:(vardims,var_data)},coords=newcords)
                     #var_ds = xr.combine_by_coords([grid_ds,var_ds])
-                    datasets.append(var_ds)
-                    del var_ds,var_data,grid_ds,newcords,vardims,var_1
                 else:
                     print('variable '+var+' not found in '+self.exp_dir)
+
+                datasets.append(var_ds)                
+                del var_ds
             
             # At to existing data or create new attr
             if hasattr(self,'data'):
@@ -207,40 +221,28 @@ def _get_time_data(exp_dir,start_date,lag0,deltat) :
     del itin,nits
     return tdata     
 
-def _parse_vartype(vartype):
-
-    if vartype=='c':
-        if adj_dict[var]['ndims']==3:
+def _parse_vartype(vartype,ndims):
+    if isinstance(vartype, str):
+        if vartype=='c':
             dims=['k','j','i']
-        elif adj_dict[var]['ndims']==2:
-            dims=['j','i']
-        else:
-            raise ValueError('Ndims of variables must be 2 or 3')
-    elif vartype=='w':
-        if adj_dict[var]['ndims']==3:
+        elif vartype=='w':
             dims=['k','j','i_g']
-        elif adj_dict[var]['ndims']==2:
-            dims=['j','i_g']
-        else:
-            raise ValueError('Ndims of variables must be 2 or 3')
-    elif vartype=='s':
-        if adj_dict[var]['ndims']==3:
-            dims=['k','j_g','i']
-        elif adj_dict[var]['ndims']==2:
-            dims=['j_g','i']
-        else:
-            raise ValueError('Ndims of variables must be 2 or 3')
-    elif vartype=='z':
-        if adj_dict[var]['ndims']==3:
+        elif vartype=='s':
+            dims=['k','j_g','i'] 
+        elif vartype=='z':
             dims=['k','j_g','i_g']
-        elif adj_dict[var]['ndims']==2:
-            dims=['j_g','i_g']
         else:
-            raise ValueError('Ndims of variables must be 2 or 3')
+            raise ValueError('Unrecognized vartype, expecting c,w,s or z.')
+        dims=dims[-ndims:]
+    elif isinstance(vartype,list):
+        dims=vartype[-ndims:]
     else:
-        print('No vartype found, variable must be defined in available_diagnostics.log')
-        dims=[]
+        print('Expecting a string or list for vartype')
     return dims
+
+def _add_metadata(var_ds,var):
+    #TODO
+    return var_ds
         
 # Tests   
 rootdir = '/data/emmomp/orchestra/'
