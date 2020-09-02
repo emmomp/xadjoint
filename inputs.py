@@ -69,6 +69,17 @@ adj_dict = \
           'sig0':0.07,
           },
          
+     'ADJqnet':
+         {'adjtype':'ADJ',
+          'varlabel':'$Q_{net}$',
+          'ECCOname':'EXFqnet',
+          'vartype':['j','i'],
+          'ndims':2,
+          'longname':'Net Heat Flux',
+          'units':'W/m^2',
+          'sig0':60.,
+          },
+         
      'adxx_empmr':
          {'adjtype':'adxx',
           'varlabel':'E-P-R',

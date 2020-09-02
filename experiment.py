@@ -12,13 +12,13 @@ import xmitgcm
 from inputs import adxx_it
 from inputs import adj_dict
 import xarray as xr
-import ecco_v4_python as ecco
+import ecco_v4_py as ecco
 
 class Exp(object):
     '''
     Representation of specific MITgcm adjoint experiment run in ECCOv4
     '''
-    def __init__(self,grid_dir,exp_dir,start_date,lag0,deltat=3600.):
+    def __init__(self,grid_dir,exp_dir,start_date,lag0,deltat=3600):
         '''
         Initialise Exp object based on user data
 
@@ -32,7 +32,7 @@ class Exp(object):
             Start date of simulation in 'YYYY-MM-DD' format.
         lag0 : string
             Lag 0 for cost function definedin *_maskT file
-        deltat : double, optional
+        deltat : int, optional
             Time step of forward model in seconds. The default is 3600. (one day).        
 
         '''
@@ -44,7 +44,7 @@ class Exp(object):
         #Assign time info                  
         self.start_date=np.datetime64(start_date)
         self.lag0=np.datetime64(lag0)
-        self.deltat=deltat
+        self.deltat=int(deltat)
         
         # Generate various time dimensions
         self.time_data=_get_time_data(self.exp_dir,self.start_date,self.lag0,self.deltat)
@@ -59,7 +59,7 @@ class Exp(object):
         '''
         # find all ADJ meta files at first it
         self.ADJ_vars=[]
-        allADJ = [os.path.basename(x) for x in glob.glob(self.exp_dir+'/ADJ*'+'{:010.0f}'.format(self.its[0])+'.meta')]
+        allADJ = [os.path.basename(x) for x in glob.glob(self.exp_dir+'ADJ*'+'{:010.0f}'.format(self.time_data['its'][0])+'.meta')]
         for item in allADJ:
             #i1 = item.find('ADJ')
             i2 = item.find('.')
@@ -69,7 +69,7 @@ class Exp(object):
         
         # find all adxx meta files
         all_vars=[]
-        alladxx = [os.path.basename(x) for x in glob.glob(self.exp_dir+'/adxx_*'+'{010.0f}'.format(adxx_it)+'.meta')]
+        alladxx = [os.path.basename(x) for x in glob.glob(self.exp_dir+'adxx_*'+'{:010.0f}'.format(adxx_it)+'.meta')]
         for item in alladxx:
             #i1 = item.find('adxx')
             i2 = item.find('.')
@@ -205,7 +205,7 @@ class Exp(object):
 def _get_time_data(exp_dir,start_date,lag0,deltat) :   
     
     tdata={}
-    with open(exp_dir+'/its_ad.txt') as f:
+    with open(exp_dir+'its_ad.txt') as f:
         itin = f.readlines()
     nits=len(itin)
     tdata['nits'] = nits   
@@ -245,7 +245,7 @@ def _add_metadata(var_ds,var):
     return var_ds
         
 # Tests   
-rootdir = '/data/emmomp/orchestra/'
+rootdir = '/data/smurphs/emmomp/orchestra/'
 griddir = rootdir+'grid2/'
 
 expdir = rootdir+'experiments/run_ad.8yr.SOpv3.00.atl/'
