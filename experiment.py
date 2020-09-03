@@ -61,6 +61,34 @@ class Experiment(object):
         else: 
             out_str = out_str+'\n No data loaded. Use [].load_vars() to load variables'
         return out_str
+    
+    def _find_results(self):
+        '''
+        Finds and prints all ADJ and adxx in experiment,
+        adds them to lists self.ADJ_vars and self.adxx_vars.
+    
+        '''
+        # find all ADJ meta files at first it
+        self.ADJ_vars=[]
+        allADJ = [os.path.basename(x) for x in glob.glob(self.exp_dir+'ADJ*'+'{:010.0f}'.format(self.time_data['its'][0])+'.meta')]
+        for item in allADJ:
+            #i1 = item.find('ADJ')
+            i2 = item.find('.')
+            self.ADJ_vars.append(item[:i2])
+        del allADJ
+        print('Found {:d} ADJ variables'.format(len(self.ADJ_vars)))
+        
+        # find all adxx meta files
+        all_vars=[]
+        alladxx = [os.path.basename(x) for x in glob.glob(self.exp_dir+'adxx_*'+'{:010.0f}'.format(adxx_it)+'.meta')]
+        for item in alladxx:
+            #i1 = item.find('adxx')
+            i2 = item.find('.')
+            all_vars.append(item[:i2])
+        varset = set(all_vars)
+        self.adxx_vars=list(varset)
+        del alladxx,varset
+        print('Found {:d} adxx variables'.format(len(self.adxx_vars)))
         
     # Load adjoint files (assumes nz=1 for adxx vars)    
     def load_vars(self,var_list='ALL'):
@@ -183,33 +211,7 @@ class Experiment(object):
         # else:
         #     raise TypeError('sigma should be a dictionary')
                        
-def _find_results(self):
-        '''
-        Finds and prints all ADJ and adxx in experiment,
-        adds them to lists self.ADJ_vars and self.adxx_vars.
 
-        '''
-        # find all ADJ meta files at first it
-        self.ADJ_vars=[]
-        allADJ = [os.path.basename(x) for x in glob.glob(self.exp_dir+'ADJ*'+'{:010.0f}'.format(self.time_data['its'][0])+'.meta')]
-        for item in allADJ:
-            #i1 = item.find('ADJ')
-            i2 = item.find('.')
-            self.ADJ_vars.append(item[:i2])
-        del allADJ
-        print('Found {:d} ADJ variables'.format(len(self.ADJ_vars)))
-        
-        # find all adxx meta files
-        all_vars=[]
-        alladxx = [os.path.basename(x) for x in glob.glob(self.exp_dir+'adxx_*'+'{:010.0f}'.format(adxx_it)+'.meta')]
-        for item in alladxx:
-            #i1 = item.find('adxx')
-            i2 = item.find('.')
-            all_vars.append(item[:i2])
-        varset = set(all_vars)
-        self.adxx_vars=list(varset)
-        del alladxx,varset
-        print('Found {:d} adxx variables'.format(len(self.adxx_vars)))
             
 def _get_time_data(exp_dir,start_date,lag0,deltat) :   
     
