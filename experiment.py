@@ -220,7 +220,7 @@ class Experiment(object):
         print('All variables loaded, starting write')      
         for var in var_list:
             print('Writing '+var)
-            for it in range(0,self.nits):
+            for it in range(0,self.time_data['nits']):
                 file_name='{}.{:010.0f}.nc'.format(var,myexp.time_data['its'][0])
                 self.data[var].isel(time=it).to_netcdf(path=out_dir+file_name)
         
