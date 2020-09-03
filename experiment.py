@@ -14,7 +14,7 @@ from inputs import adj_dict
 import xarray as xr
 import ecco_v4_py as ecco
 
-class Exp(object):
+class Experiment(object):
     '''
     Representation of specific MITgcm adjoint experiment run in ECCOv4
     '''
@@ -48,7 +48,10 @@ class Exp(object):
         
         # Generate various time dimensions
         self.time_data=_get_time_data(self.exp_dir,self.start_date,self.lag0,self.deltat)
-        
+
+    def __repr__(self):
+        out_str = '<xadjoint.Experiment> \n Directories: \t experiment = {} \n\t grid = {}'.format(self.exp_dir,self.grid_dir)        
+        return out_str        
     
     # Look for ADJ and adxx files
     def find_results(self):
@@ -252,8 +255,8 @@ def _parse_vartype(vartype,ndims):
 
 def _add_time_coords(var_ds,time_data):
     var_ds['time']=time_data['dates']
-    var_ds['lag_days']=("time",time_data['lag_days'])
-    var_ds['lag_years']=("time",time_data['lag_years'])
+    var_ds=var_ds.assign_coords(lag_days=("time",time_data['lag_days']))
+    var_ds=var_ds.assign_coords(lag_years=("time",time_data['lag_years']))
     return var_ds
         
 # Tests   
@@ -264,10 +267,10 @@ expdir = rootdir+'experiments/run_ad.8yr.SOpv3.00.atl/'
 startdate='1993-01-01'
 lag0='2000-07-01'
          
-myexp = Exp(griddir,expdir,start_date=startdate,lag0=lag0)
-print(vars(myexp))
+myexp = Experiment(griddir,expdir,start_date=startdate,lag0=lag0)
+myexp
 
 #myexp = Exp('smurphs','run_ad.CORE2.5yr.1mosssrelax_k500_mergesss')
 #myexp.find_results()
-myexp.load_vars(['ADJqnet','ADJaqh','adxx_tauu','adxx_tauv','adxx_qnet','ADJsalt'])
+myexp.load_vars(['ADJqnet','adxx_tauu','adxx_tauv','adxx_qnet','ADJsalt'])
 #myexp.load_vars(['adxx_tauu',])
