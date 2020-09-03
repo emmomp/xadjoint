@@ -31,9 +31,9 @@ class Experiment(object):
         start_date : string
             Start date of simulation in 'YYYY-MM-DD' format.
         lag0 : string
-            Lag 0 for cost function definedin *_maskT file
-        deltat : int, optional
-            Time step of forward model in seconds. The default is 3600. (one day).        
+            Lag 0 for cost function defined in *_maskT file
+        deltat : int, default 3600
+            Time step of forward model in seconds. The default is 3600 (one day).        
 
         '''
         
@@ -48,13 +48,142 @@ class Experiment(object):
         
         # Generate various time dimensions
         self.time_data=_get_time_data(self.exp_dir,self.start_date,self.lag0,self.deltat)
-
+        self=_find_results(self)
+        
     def __repr__(self):
-        out_str = '<xadjoint.Experiment> \n Directories: \t experiment = {} \n\t grid = {}'.format(self.exp_dir,self.grid_dir)        
-        return out_str        
+        out_str = '<xadjoint.Experiment> \n Directories: \n\t experiment = {} \n\t grid = {}'.format(self.exp_dir,self.grid_dir)     
+        out_str = out_str+'\n Time Data: \n\t {} timesteps'.format(str(self.time_data['nits']))
+        for td in ['its','dates','lag_days','lag_years']:
+            out_str = out_str+'\n\t {} from {} to {}'.format(td,str(self.time_data[td][0]),str(self.time_data[td][-1]))
+        out_str = out_str+'\n Adjoint Variables: \n\t ADJ type {} \n\t adxx type {}'.format(str(self.ADJ_vars),str(self.adxx_vars))
+        if 'data' in vars(self):
+            out_str = out_str+'\n Data loaded: '+self.data
+        else: 
+            out_str = out_str+'\n No data loaded. Use [].load_vars() to load variables'
+        return out_str
+        
+    # Load adjoint files (assumes nz=1 for adxx vars)    
+    def load_vars(self,var_list='ALL'):
+        '''
+        Load user specified list of variables into xarray DataSet.
+
+        Parameters
+        ----------
+        var_list : list of strings. Default 'ALL'
+            Names of data variables to be loaded. If 'ALL', all will be loaded
+
+        Returns
+        -------
+        self.data is an xarray DataSet with variables loaded.
+
+        '''
+        if var_list=='ALL':
+            var_list=[*self.ADJ_vars,*self.adxx_vars]       
+
+        # Loop through and read variables
+        datasets = []
+        for var in var_list:
+            print('Reading in '+var)
+            if 'vartype' in adj_dict[var].keys():
+                dims=_parse_vartype(adj_dict[var]['vartype'],adj_dict[var]['ndims'])  
+            else:
+                dims=None
+            if 'attrs' in adj_dict[var].keys():
+                attrs=adj_dict[var]['attrs']
+            else:
+                attrs={}
+            
+            if adj_dict[var]['adjtype'] == 'ADJ':                    
+                if dims is None:
+                    var_ds= xmitgcm.open_mdsdataset(data_dir=self.exp_dir,grid_dir=self.grid_dir,
+                                                prefix=[var,],geometry='llc',delta_t=self.deltat,ref_date=self.start_date,
+                                                read_grid=False)   
+                    var_ds=var_ds.rename({'face':'tile'})
+                else:                             
+                    extra_variable={var:dict(dims=dims,attrs=attrs)}
+                    var_ds= xmitgcm.open_mdsdataset(data_dir=self.exp_dir,grid_dir=self.grid_dir,
+                                                prefix=[var,],geometry='llc',delta_t=self.deltat,ref_date=self.start_date,
+                                                extra_variables=extra_variable,read_grid=False)
+                    var_ds=var_ds.rename({'face':'tile'})
+
+            elif var in self.adxx_vars:
+                if adj_dict[var]['ndims']==3:
+                    var_data= xmitgcm.utils.read_3d_llc_data(fname=self.exp_dir+'/'+var+'.'+'{:010.0f}'.format(adxx_it)+'.data',nz=50,nx=90,nrecs=self.time_data['nits'],dtype='>f4') 
+                elif adj_dict[var]['ndims']==2:
+                    var_data= xmitgcm.utils.read_3d_llc_data(fname=self.exp_dir+'/'+var+'.'+'{:010.0f}'.format(adxx_it)+'.data',nz=1,nx=90,nrecs=self.time_data['nits'],dtype='>f4') 
+                else:
+                    raise ValueError('Ndims of variables must be 2 or 3')
+                if isinstance(adj_dict[var]['vartype'],str):
+                    if adj_dict[var]['ndims']==3:
+                        var_ds=ecco.llc_tiles_to_xda(var_data, var_type=adj_dict[var]['vartype'],dim4='depth', dim5='time')
+                    elif adj_dict[var]['ndims']==2:
+                        var_ds=ecco.llc_tiles_to_xda(var_data, var_type=adj_dict[var]['vartype'],dim4='time')
+                    else:
+                        raise ValueError('Ndims of variables must be 2 or 3')
+                    var_ds=xr.Dataset(data_vars={var:var_ds},coords=var_ds.coords)
+                elif dims is None:
+                    raise ValueError('Vartype must be defined for adxx fields')
+                else:
+                    grid_ds = xmitgcm.open_mdsdataset(iters=None,read_grid=True,geometry='llc',prefix=var,data_dir=self.exp_dir,grid_dir=self.grid_dir)
+                    dims=['face',]+dims
+                    newcoords = {k: grid_ds[k] for k in dims}
+                    dims=['time',]+dims 
+                    newcoords['time']=self.time_data['dates']
+                    var_ds=xr.Dataset(data_vars={var:(dims,var_data)},coords=newcoords)
+                    var_ds=var_ds.rename({'face':'tile'})
+                    del newcoords,grid_ds
+                var_ds[var].attrs=attrs
+                var_ds=_add_time_coords(var_ds,self.time_data)
+                        
+                #var_ds = xr.Dataset(data_vars={var:(vardims,var_data)},coords=newcords)
+                #var_ds = xr.combine_by_coords([grid_ds,var_ds])
+            else:
+                print('variable '+var+' not found in '+self.exp_dir)
+
+            datasets.append(var_ds)                
+            del var_ds
+        
+        # At to existing data or create new attr
+        if hasattr(self,'data'):
+            self.data = xr.combine_by_coords([self.data,]+datasets)
+        else:
+            self.data = xr.combine_by_coords(datasets)
+        del datasets
     
-    # Look for ADJ and adxx files
-    def find_results(self):
+    # Calculate stats with optional sigma multiplier    
+    def calc_stats(self,sigma=None,sigma_type=None): 
+        # sigma should be dictionary with keys equal to variable names
+        # sigma_type should be 1D or 3D, if sigma provided
+        
+        # # Check if data exists
+        # if not hasattr(self,'data'):
+        #     raise AttributeError('No data found in this experiment - run .load_vars first')
+        # # Check what sigma we have
+        # if sigma is None:
+        #     print('No sigma provided - raw sensitivity stats only')
+        # elif type(sigma) is dict:
+        #     print('Using provided sigma dictionary for multiplier')
+        #     if sigma_type == '1D':
+        #         if type(list(sigma.values())[0]) is float: 
+        #             print('Found 1D sigmas')
+        #         else:
+        #             raise TypeError('sigma dict should contain floats')
+        #     elif sigma_type == '3D':
+        #         if type(list(sigma.values())[0]) is str:
+        #             print('Found 3D sigmas')
+                    
+        #             #TO DO: ADD STATS
+                    
+        #              #exfqnet = xr.open_mfdataset(glob.glob('EXFqnet*nc'),concat_dim='tile')  
+                    
+        #         else:
+        #             raise TypeError('sigma dict should contain filenames')
+        #     else:
+        #         raise ValueError('sigma_type should be 1D or 3D')
+        # else:
+        #     raise TypeError('sigma should be a dictionary')
+                       
+def _find_results(self):
         '''
         Finds and prints all ADJ and adxx in experiment,
         adds them to lists self.ADJ_vars and self.adxx_vars.
@@ -81,139 +210,6 @@ class Experiment(object):
         self.adxx_vars=list(varset)
         del alladxx,varset
         print('Found {:d} adxx variables'.format(len(self.adxx_vars)))
-        
-    def load_all(self):
-        '''
-        Loads all ADJ and adxx variables found in experiment.
-
-        '''
-        if not hasattr(self,'ADJ_vars'):
-            self.find_results()
-        self.load_vars([*self.ADJ_vars,*self.adxx_vars])    
-        
-    # Load adjoint files (assumes nz=1 for adxx vars)    
-    def load_vars(self,var_list='ALL'):
-        '''
-        Load user specified list of variables into xarray DataSet.
-
-        Parameters
-        ----------
-        var_list : list of strings. Default 'ALL'
-            Names of data variables to be loaded. If 'ALL', all will be loaded
-
-        Returns
-        -------
-        self.data is an xarray DataSet with variables loaded.
-
-        '''
-        if var_list=='ALL':
-            self.load_all()
-        else:       
-            # Check if find_results has been run
-            if not hasattr(self,'ADJ_vars'):
-                self.find_results()
-            # Loop through and read variables
-            datasets = []
-            for var in var_list:
-                print('Reading in '+var)
-                if 'vartype' in adj_dict[var].keys():
-                    dims=_parse_vartype(adj_dict[var]['vartype'],adj_dict[var]['ndims'])  
-                else:
-                    dims=None
-                if 'attrs' in adj_dict[var].keys():
-                    attrs=adj_dict[var]['attrs']
-                else:
-                    attrs={}
-                
-                if adj_dict[var]['adjtype'] == 'ADJ':                    
-                    if dims is None:
-                        var_ds= xmitgcm.open_mdsdataset(data_dir=self.exp_dir,grid_dir=self.grid_dir,
-                                                    prefix=[var,],geometry='llc',delta_t=self.deltat,ref_date=self.start_date,
-                                                    read_grid=False)   
-                        var_ds=var_ds.rename({'face':'tile'})
-                    else:                             
-                        extra_variable={var:dict(dims=dims,attrs=attrs)}
-                        var_ds= xmitgcm.open_mdsdataset(data_dir=self.exp_dir,grid_dir=self.grid_dir,
-                                                    prefix=[var,],geometry='llc',delta_t=self.deltat,ref_date=self.start_date,
-                                                    extra_variables=extra_variable,read_grid=False)
-                        var_ds=var_ds.rename({'face':'tile'})
-
-                elif var in self.adxx_vars:
-                    if adj_dict[var]['ndims']==3:
-                        var_data= xmitgcm.utils.read_3d_llc_data(fname=self.exp_dir+'/'+var+'.'+'{:010.0f}'.format(adxx_it)+'.data',nz=50,nx=90,nrecs=self.time_data['nits'],dtype='>f4') 
-                    elif adj_dict[var]['ndims']==2:
-                        var_data= xmitgcm.utils.read_3d_llc_data(fname=self.exp_dir+'/'+var+'.'+'{:010.0f}'.format(adxx_it)+'.data',nz=1,nx=90,nrecs=self.time_data['nits'],dtype='>f4') 
-                    else:
-                        raise ValueError('Ndims of variables must be 2 or 3')
-                    if isinstance(adj_dict[var]['vartype'],str):
-                        if adj_dict[var]['ndims']==3:
-                            var_ds=ecco.llc_tiles_to_xda(var_data, var_type=adj_dict[var]['vartype'],dim4='depth', dim5='time')
-                        elif adj_dict[var]['ndims']==2:
-                            var_ds=ecco.llc_tiles_to_xda(var_data, var_type=adj_dict[var]['vartype'],dim4='time')
-                        else:
-                            raise ValueError('Ndims of variables must be 2 or 3')
-                        var_ds=xr.Dataset(data_vars={var:var_ds},coords=var_ds.coords)
-                    elif dims is None:
-                        raise ValueError('Vartype must be defined for adxx fields')
-                    else:
-                        grid_ds = xmitgcm.open_mdsdataset(iters=None,read_grid=True,geometry='llc',prefix=var,data_dir=self.exp_dir,grid_dir=self.grid_dir)
-                        dims=['face',]+dims
-                        newcoords = {k: grid_ds[k] for k in dims}
-                        dims=['time',]+dims 
-                        newcoords['time']=self.time_data['dates']
-                        var_ds=xr.Dataset(data_vars={var:(dims,var_data)},coords=newcoords)
-                        var_ds=var_ds.rename({'face':'tile'})
-                        del newcoords,grid_ds
-                    var_ds[var].attrs=attrs
-                    var_ds=_add_time_coords(var_ds,self.time_data)
-                            
-                    #var_ds = xr.Dataset(data_vars={var:(vardims,var_data)},coords=newcords)
-                    #var_ds = xr.combine_by_coords([grid_ds,var_ds])
-                else:
-                    print('variable '+var+' not found in '+self.exp_dir)
-
-                datasets.append(var_ds)                
-                del var_ds
-            
-            # At to existing data or create new attr
-            if hasattr(self,'data'):
-                self.data = xr.combine_by_coords([self.data,]+datasets)
-            else:
-                self.data = xr.combine_by_coords(datasets)
-            del datasets
-    
-    # Calculate stats with optional sigma multiplier    
-    def calc_stats(self,sigma=None,sigma_type=None): 
-        # sigma should be dictionary with keys equal to variable names
-        # sigma_type should be 1D or 3D, if sigma provided
-        
-        # Check if data exists
-        if not hasattr(self,'data'):
-            raise AttributeError('No data found in this experiment - run .load_vars first')
-        # Check what sigma we have
-        if sigma is None:
-            print('No sigma provided - raw sensitivity stats only')
-        elif type(sigma) is dict:
-            print('Using provided sigma dictionary for multiplier')
-            if sigma_type == '1D':
-                if type(list(sigma.values())[0]) is float: 
-                    print('Found 1D sigmas')
-                else:
-                    raise TypeError('sigma dict should contain floats')
-            elif sigma_type == '3D':
-                if type(list(sigma.values())[0]) is str:
-                    print('Found 3D sigmas')
-                    
-                    #TO DO: ADD STATS
-                    
-                     #exfqnet = xr.open_mfdataset(glob.glob('EXFqnet*nc'),concat_dim='tile')  
-                    
-                else:
-                    raise TypeError('sigma dict should contain filenames')
-            else:
-                raise ValueError('sigma_type should be 1D or 3D')
-        else:
-            raise TypeError('sigma should be a dictionary')
             
 def _get_time_data(exp_dir,start_date,lag0,deltat) :   
     
@@ -222,7 +218,7 @@ def _get_time_data(exp_dir,start_date,lag0,deltat) :
         itin = f.readlines()
     nits=len(itin)
     tdata['nits'] = nits   
-    tdata['its'] = np.zeros(nits)
+    tdata['its'] = np.zeros(nits,dtype='int')
     tdata['dates']=np.empty(nits,dtype='datetime64[D]')
     tdata['lag_days']=np.empty(nits)
     tdata['lag_years']=np.empty(nits)
