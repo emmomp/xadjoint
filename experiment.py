@@ -48,7 +48,7 @@ class Experiment(object):
         
         # Generate various time dimensions
         self.time_data=_get_time_data(self.exp_dir,self.start_date,self.lag0,self.deltat)
-        self=_find_results(self)
+        self=self._find_results()
         
     def __repr__(self):
         out_str = '<xadjoint.Experiment> \n Directories: \n\t experiment = {} \n\t grid = {}'.format(self.exp_dir,self.grid_dir)     
@@ -89,6 +89,7 @@ class Experiment(object):
         self.adxx_vars=list(varset)
         del alladxx,varset
         print('Found {:d} adxx variables'.format(len(self.adxx_vars)))
+        return self
         
     # Load adjoint files (assumes nz=1 for adxx vars)    
     def load_vars(self,var_list='ALL'):
@@ -169,17 +170,16 @@ class Experiment(object):
                 print('variable '+var+' not found in '+self.exp_dir)
 
             datasets.append(var_ds)                
-            del var_ds
-        
+            del var_ds       
         # At to existing data or create new attr
         if hasattr(self,'data'):
             self.data = xr.combine_by_coords([self.data,]+datasets)
         else:
             self.data = xr.combine_by_coords(datasets)
         del datasets
-    
+        
     # Calculate stats with optional sigma multiplier    
-    def calc_stats(self,sigma=None,sigma_type=None): 
+#    def calc_stats(self,sigma=None,sigma_type=None): 
         # sigma should be dictionary with keys equal to variable names
         # sigma_type should be 1D or 3D, if sigma provided
         
@@ -210,9 +210,6 @@ class Experiment(object):
         #         raise ValueError('sigma_type should be 1D or 3D')
         # else:
         #     raise TypeError('sigma should be a dictionary')
-                       
-
-            
 def _get_time_data(exp_dir,start_date,lag0,deltat) :   
     
     tdata={}
