@@ -127,13 +127,13 @@ class Exp(object):
                         var_ds= xmitgcm.open_mdsdataset(data_dir=self.exp_dir,grid_dir=self.grid_dir,
                                                     prefix=[var,],geometry='llc',delta_t=self.deltat,ref_date=self.start_date,
                                                     read_grid=False)   
-                        var_ds=var_ds.rename_dims({'face':'tile'})
+                        var_ds=var_ds.rename({'face':'tile'})
                     else:                             
                         extra_variable={var:dict(dims=dims,attrs=attrs)}
                         var_ds= xmitgcm.open_mdsdataset(data_dir=self.exp_dir,grid_dir=self.grid_dir,
                                                     prefix=[var,],geometry='llc',delta_t=self.deltat,ref_date=self.start_date,
                                                     extra_variables=extra_variable,read_grid=False)
-                        var_ds=var_ds.rename_dims({'face':'tile'})
+                        var_ds=var_ds.rename({'face':'tile'})
 
                 elif var in self.adxx_vars:
                     if adj_dict[var]['ndims']==3:
@@ -155,10 +155,11 @@ class Exp(object):
                     else:
                         grid_ds = xmitgcm.open_mdsdataset(iters=None,read_grid=True,geometry='llc',prefix=var,data_dir=self.exp_dir,grid_dir=self.grid_dir)
                         dims=['face',]+dims
-                        newcoords = {k: grid_ds[k] for k in dims} 
-                        dims=['time',]+dims
-                        var_ds=xr.Dataset(data_vars={var:(dims,var_data)},coords=newcoords)                        
-                        var_ds=var_ds.rename_dims({'face':'tile'})
+                        newcoords = {k: grid_ds[k] for k in dims}
+                        dims=['time',]+dims 
+                        newcoords['time']=self.time_data['dates']
+                        var_ds=xr.Dataset(data_vars={var:(dims,var_data)},coords=newcoords)
+                        var_ds=var_ds.rename({'face':'tile'})
                         del newcoords,grid_ds
                     var_ds[var].attrs=attrs
                     var_ds=_add_time_coords(var_ds,self.time_data)
