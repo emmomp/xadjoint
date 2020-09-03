@@ -48,16 +48,16 @@ class Experiment(object):
         
         # Generate various time dimensions
         self.time_data=_get_time_data(self.exp_dir,self.start_date,self.lag0,self.deltat)
-        self=self._find_results()
+        self._find_results()
         
     def __repr__(self):
         out_str = '<xadjoint.Experiment> \n Directories: \n\t experiment = {} \n\t grid = {}'.format(self.exp_dir,self.grid_dir)     
-        out_str = out_str+'\n Time Data: \n\t {} timesteps'.format(str(self.time_data['nits']))
+        out_str = out_str+'\n Time Data: \n\t Start Date {}, Lag Zero {} \n\t {} timesteps, deltat = {}'.format(str(self.start_date),str(self.lag0),str(self.time_data['nits']),str(self.deltat))
         for td in ['its','dates','lag_days','lag_years']:
             out_str = out_str+'\n\t {} from {} to {}'.format(td,str(self.time_data[td][0]),str(self.time_data[td][-1]))
         out_str = out_str+'\n Adjoint Variables: \n\t ADJ type {} \n\t adxx type {}'.format(str(self.ADJ_vars),str(self.adxx_vars))
         if 'data' in vars(self):
-            out_str = out_str+'\n Data loaded: '+self.data
+            out_str = out_str+'\n Data loaded: '+str(self.data)
         else: 
             out_str = out_str+'\n No data loaded. Use [].load_vars() to load variables'
         return out_str
@@ -89,7 +89,6 @@ class Experiment(object):
         self.adxx_vars=list(varset)
         del alladxx,varset
         print('Found {:d} adxx variables'.format(len(self.adxx_vars)))
-        return self
         
     # Load adjoint files (assumes nz=1 for adxx vars)    
     def load_vars(self,var_list='ALL'):
@@ -263,7 +262,6 @@ startdate='1993-01-01'
 lag0='2000-07-01'
          
 myexp = Experiment(griddir,expdir,start_date=startdate,lag0=lag0)
-myexp
 
 #myexp = Exp('smurphs','run_ad.CORE2.5yr.1mosssrelax_k500_mergesss')
 #myexp.find_results()
