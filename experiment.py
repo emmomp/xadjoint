@@ -93,16 +93,13 @@ class Experiment(object):
     # Load adjoint files (assumes nz=1 for adxx vars)    
     def load_vars(self,var_list='ALL'):
         '''
-        Load user specified list of variables into xarray DataSet.
+        Load user specified list of variables into xarray DataSet placed in self.data.
+        Will overwrite any previously loaded variables with the same name.
 
         Parameters
         ----------
         var_list : list of strings. Default 'ALL'
-            Names of data variables to be loaded. If 'ALL', all will be loaded
-
-        Returns
-        -------
-        self.data is an xarray DataSet with variables loaded.
+            Names of data variables to be loaded. If 'ALL', all will be loaded            
 
         '''
         if var_list=='ALL':
@@ -112,6 +109,9 @@ class Experiment(object):
         datasets = []
         for var in var_list:
             print('Reading in '+var)
+            if var not in adj_dict.keys():
+                raise ValueError('{} not found in adj_dict. Please add details of variable to inputs.py'.format(var))
+            
             if 'vartype' in adj_dict[var].keys():
                 dims=_parse_vartype(adj_dict[var]['vartype'],adj_dict[var]['ndims'])  
             else:
@@ -176,7 +176,56 @@ class Experiment(object):
         else:
             self.data = xr.combine_by_coords(datasets)
         del datasets
+ 
+    def to_nctiles(self,var_list=None,out_dir=None):
+        '''
+        Writes data to nctiles format netcdf files, one per timestep matching ECCOv4r4 format
+        Loads any variables not already read in.
+        Output netcdfs readable in python using xarray.open_dataset,
+        or in matlab with gcmfaces toolbox fn read_nctiles.
+
+        Parameters
+        ----------
+        var_list : list, optional
+            List of variables to be written to file. The default is to write the variables
+            found in <experiment>.data. 
+            Can also be 'ALL' which writes all variables found in experiment.
+        out_dir : str, optional
+            Where files are to be written. The default is the experiment directory.
+
+        Returns
+        -------
+        None.
+
+        '''
+        if out_dir is None:
+            out_dir=self.exp_dir
+            
+        print('Preparing to write netcdf to '+out_dir)
         
+        if 'data' not in vars(self):
+            print('No data found, reading in data first')
+            self.load_vars(var_list)
+        else:
+            if var_list is None:
+                var_list=[var for var in self.data]
+            else:
+                if var_list == 'ALL':
+                    var_list=[*self.ADJ_vars,*self.adxx_vars]                  
+                load_list=[var for var in var_list if var not in self.data]
+                if not load_list ==[]:
+                    print('Reading in '+str(load_list))
+                    self.load_vars(var_list)                
+
+        print('All variables loaded, starting write')      
+        for var in var_list:
+            print('Writing '+var)
+            for it in range(0,self.nits):
+                file_name='{}.{:010.0f}.nc'.format(var,myexp.time_data['its'][0])
+                self.data[var].isel(time=it).to_netcdf(path=out_dir+file_name)
+        
+        print('All files written to '+out_dir)        
+    
     # Calculate stats with optional sigma multiplier    
 #    def calc_stats(self,sigma=None,sigma_type=None): 
         # sigma should be dictionary with keys equal to variable names
@@ -209,6 +258,9 @@ class Experiment(object):
         #         raise ValueError('sigma_type should be 1D or 3D')
         # else:
         #     raise TypeError('sigma should be a dictionary')
+        
+
+        
 def _get_time_data(exp_dir,start_date,lag0,deltat) :   
     
     tdata={}
