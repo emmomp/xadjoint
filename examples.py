@@ -16,9 +16,11 @@ startdate='1993-01-01'
 lag0='2000-07-01'
          
 myexp = ex.Experiment(griddir,expdir,start_date=startdate,lag0=lag0)
-print(myexp)
+
 #myexp = Exp('smurphs','run_ad.CORE2.5yr.1mosssrelax_k500_mergesss')
 #myexp.find_results()
 myexp.load_vars(['ADJqnet','adxx_tauu','adxx_tauv','adxx_qnet','ADJsalt'])
 print(myexp)
-#myexp.load_vars(['adxx_tauu',])
+myexp.load_vars(['adxx_tauv',])
+myexp.to_nctiles(['ADJqnet',])
+myexp.to_nctiles()
