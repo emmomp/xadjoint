@@ -116,20 +116,24 @@ class Exp(object):
                 if 'vartype' in adj_dict[var].keys():
                     dims=_parse_vartype(adj_dict[var]['vartype'],adj_dict[var]['ndims'])  
                 else:
-                    dims=[]
+                    dims=None
+                if 'attrs' in adj_dict[var].keys():
+                    attrs=adj_dict[var]['attrs']
+                else:
+                    attrs={}
                 
                 if adj_dict[var]['adjtype'] == 'ADJ':                    
-                    if dims == []:
+                    if dims is None:
                         var_ds= xmitgcm.open_mdsdataset(data_dir=self.exp_dir,grid_dir=self.grid_dir,
                                                     prefix=[var,],geometry='llc',delta_t=self.deltat,ref_date=self.start_date,
                                                     read_grid=False)   
-                        var_ds.rename_dims({'face':'tile'})
+                        var_ds=var_ds.rename_dims({'face':'tile'})
                     else:                             
-                        extra_variable={var:dict(dims=dims,attrs=dict(standard_name=var,long_name='Sensitivity to '+adj_dict[var]['longname'],units='[J]/'+adj_dict[var]['units']))}
+                        extra_variable={var:dict(dims=dims,attrs=attrs)}
                         var_ds= xmitgcm.open_mdsdataset(data_dir=self.exp_dir,grid_dir=self.grid_dir,
                                                     prefix=[var,],geometry='llc',delta_t=self.deltat,ref_date=self.start_date,
                                                     extra_variables=extra_variable,read_grid=False)
-                        var_ds.rename_dims({'face':'tile'})
+                        var_ds=var_ds.rename_dims({'face':'tile'})
 
                 elif var in self.adxx_vars:
                     if adj_dict[var]['ndims']==3:
@@ -146,19 +150,18 @@ class Exp(object):
                         else:
                             raise ValueError('Ndims of variables must be 2 or 3')
                         var_ds=xr.Dataset(data_vars={var:var_ds},coords=var_ds.coords)
-                        var_ds['time']=self.time_data['dates']
-                    elif dims==[]:
+                    elif dims is None:
                         raise ValueError('Vartype must be defined for adxx fields')
                     else:
                         grid_ds = xmitgcm.open_mdsdataset(iters=None,read_grid=True,geometry='llc',prefix=var,data_dir=self.exp_dir,grid_dir=self.grid_dir)
                         dims=['face',]+dims
                         newcoords = {k: grid_ds[k] for k in dims} 
                         dims=['time',]+dims
-                        newcoords['time']=self.time_data['dates']
                         var_ds=xr.Dataset(data_vars={var:(dims,var_data)},coords=newcoords)                        
-                        var_ds.rename_dims({'face':'tile'})
+                        var_ds=var_ds.rename_dims({'face':'tile'})
                         del newcoords,grid_ds
-                    var_ds=_add_metadata(var_ds,var)
+                    var_ds[var].attrs=attrs
+                    var_ds=_add_time_coords(var_ds,self.time_data)
                             
                     #var_ds = xr.Dataset(data_vars={var:(vardims,var_data)},coords=newcords)
                     #var_ds = xr.combine_by_coords([grid_ds,var_ds])
@@ -241,13 +244,15 @@ def _parse_vartype(vartype,ndims):
             raise ValueError('Unrecognized vartype, expecting c,w,s or z.')
         dims=dims[-ndims:]
     elif isinstance(vartype,list):
-        dims=vartype[-ndims:]
+        dims=vartype
     else:
         print('Expecting a string or list for vartype')
     return dims
 
-def _add_metadata(var_ds,var):
-    #TODO
+def _add_time_coords(var_ds,time_data):
+    var_ds['time']=time_data['dates']
+    var_ds['lag_days']=("time",time_data['lag_days'])
+    var_ds['lag_years']=("time",time_data['lag_years'])
     return var_ds
         
 # Tests   
