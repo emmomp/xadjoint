@@ -222,7 +222,7 @@ class Experiment(object):
             print('Writing '+var)
             for it in range(0,self.time_data['nits']):
                 file_name='{}.{:010.0f}.nc'.format(var,self.time_data['its'][it])
-                self.data[var].isel(time=it).to_netcdf(path=out_dir+file_name)        
+                self.data[var].isel(time=it).to_netcdf(path=out_dir+file_name)
         print('All files written to '+out_dir)        
     
     # Calculate stats with optional sigma multiplier    
