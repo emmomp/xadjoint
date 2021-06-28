@@ -9,8 +9,8 @@ import os
 import numpy as np
 import glob
 import xmitgcm
-from inputs import adxx_it
-from inputs import adj_dict
+from .inputs import adxx_it
+from .inputs import adj_dict
 import xarray as xr
 import ecco_v4_py as ecco
 
