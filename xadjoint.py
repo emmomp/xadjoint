@@ -9,8 +9,8 @@ import os
 import numpy as np
 import glob
 import xmitgcm
-from .inputs import adxx_it
-from .inputs import adj_dict
+from inputs import adxx_it
+from inputs import adj_dict
 import xarray as xr
 import ecco_v4_py as ecco
 
@@ -177,9 +177,9 @@ class Experiment(object):
             self.data = xr.combine_by_coords(datasets)
         del datasets
  
-    def to_nctiles(self,var_list=None,out_dir=None):
+    def to_nctiles(self,var_list=None,out_dir=None,split_timesteps=True):
         '''
-        Writes data to nctiles format netcdf files, one per timestep matching ECCOv4r4 format
+        Writes data to nctiles format netcdf files, one per timestep (optional) matching ECCOv4r4 format
         Loads any variables not already read in.
         Output netcdfs readable in python using xarray.open_dataset,
         or in matlab with gcmfaces toolbox fn read_nctiles.
@@ -192,6 +192,8 @@ class Experiment(object):
             Can also be 'ALL' which writes all variables found in experiment.
         out_dir : str, optional
             Where files are to be written. The default is the experiment directory.
+        split_timesteps : boolean, optional
+            If True (default), writes one variable per timestep
 
         Returns
         -------
@@ -220,10 +222,15 @@ class Experiment(object):
         print('All variables loaded, starting write')      
         for var in var_list:
             print('Writing '+var)
-            for it in range(0,self.time_data['nits']):
-                file_name='{}.{:010.0f}.nc'.format(var,self.time_data['its'][it])
-                self.data[var].isel(time=it).to_netcdf(path=out_dir+file_name)
-        print('All files written to '+out_dir)        
+            if split_timesteps:
+                for it in range(0,self.time_data['nits']):
+                    file_name='{}.{:010.0f}.nc'.format(var,self.time_data['its'][it])
+                    self.data[var].isel(time=it).to_netcdf(path=out_dir+file_name)
+            else:
+                file_name='{}.nc'.format(var)
+                self.data[var].to_netcdf(path=out_dir+file_name)
+        print('All files written to '+out_dir)    
+        
     
     # Calculate stats with optional sigma multiplier    
 #    def calc_stats(self,sigma=None,sigma_type=None): 
