@@ -13,6 +13,9 @@ from .inputs import adxx_it
 from .inputs import adj_dict
 import xarray as xr
 import ecco_v4_py as ecco
+import matplotlib.pyplot as plt
+import cartopy.crs as ccrs
+from matplotlib import animation
 
 class Experiment(object):
     '''
@@ -133,6 +136,8 @@ class Experiment(object):
                                                 prefix=[var,],geometry='llc',delta_t=self.deltat,ref_date=self.start_date,
                                                 extra_variables=extra_variable,read_grid=False)
                     var_ds=var_ds.rename({'face':'tile'})
+                var_ds[var].attrs=attrs
+                var_ds=_add_time_coords(var_ds,self.time_data)
 
             elif var in self.adxx_vars:
                 if adj_dict[var]['ndims']==3:
@@ -172,9 +177,9 @@ class Experiment(object):
             del var_ds       
         # At to existing data or create new attr
         if hasattr(self,'data'):
-            self.data = xr.combine_by_coords([self.data,]+datasets)
+            self.data = xr.combine_by_coords([self.data,]+datasets,combine_attrs="drop_conflicts")
         else:
-            self.data = xr.combine_by_coords(datasets)
+            self.data = xr.combine_by_coords(datasets,combine_attrs="drop_conflicts")
         del datasets
  
     def to_nctiles(self,var_list=None,out_dir=None,split_timesteps=True):
@@ -231,6 +236,146 @@ class Experiment(object):
                 self.data[var].to_netcdf(path=out_dir+file_name)
         print('All files written to '+out_dir)    
         
+    def quick_plots(self,save=False,plots_dir=None,label=None,proj_dict={'projection_type':'stereo','lat_lim':-20},axlims=None):
+        '''
+        Summary plots of all loaded variables
+
+        Parameters
+        ----------
+        save : boolean, optional.
+            Whether to save figures to files named [label]_[var].png. Default False
+        plots_dir : string, optional.
+            Where to save figures. Default None, saves in working dir
+        label : string, optional.
+            Label to add to front of figure name, defaults to expt name derived from self.exp_dir
+        proj_dict : dictionary, optional
+            Projection options for spatial plots, defaults to Southern Ocean polar stereo
+
+        Returns
+        -------
+        None.
+
+        '''    
+        grid_ds=xr.open_dataset(self.grid_dir+'ECCOv4r3_grid_with_masks.nc')
+        ad_mean=self.data.mean(dim=['i','j','i_g','j_g','tile'])
+        ad_absmean=np.abs(self.data).mean(dim=['i','j','i_g','j_g','tile'])
+        for var in self.data:
+            fig=plt.figure(figsize=[12,5])
+            ax=plt.subplot(1,2,1)
+            ad_mean[var].plot(x='lag_years',label='<dJ>',ax=ax)
+            ad_absmean[var].plot(x='lag_years',label='<|dJ|>',ax=ax)
+            plt.axhline(0,color='k')
+            plt.xlabel('Lag (y)',fontsize=12)
+            plt.ylabel('')
+            plt.legend(fontsize=12)
+            peakt=ad_absmean[var].argmax(dim='time').load()
+            clim=np.abs(self.data[var].isel(time=peakt)).max().load()*0.7
+            [p,ax]=_plot_ecco(grid_ds,self.data[var].isel(time=peakt),subplot_grid=[1,2,2],**proj_dict,cmin=-clim,cmax=clim)
+            plt.title('Lag {:1.1f}y'.format(self.data['lag_years'][peakt].data),fontsize=12,fontweight='bold')
+            plt.suptitle(adj_dict[var]['varlabel'],fontsize=14,fontweight='bold')
+            if axlims:
+                ax.set_extent(axlims, crs=ccrs.PlateCarree())
+            if save:                
+                if not label:
+                    label=self.exp_dir.split('/')[-2]
+                plt.savefig(plots_dir+label+'_'+var+'.png')
+                
+    def calc_tseries(self,masks=None,save=True,var_list=None,label=None):
+        '''
+        Calculates time series of sensitivities provided, or else all loaded
+        
+        Parameters
+        ----------
+        masks : dict, optional
+            Dictionary of masknames and masks to apply to data before taking mean, defaults to global
+        save : boolean, optional
+            Whether to write the timeseries to netcdf in self.exp_dir, default True
+        var_list : list, optional
+            List of variables to calculate timeseries for
+        label : string, optional.
+            Label to add to front of figure name, defaults to expt name derived from self.exp_dir
+            
+        Returns
+        -------
+        xarray dataset containing the mean and mean of the absolute values of the variables in var_list, in the regions specified in the dictionary masks
+        
+        '''
+        grid_ds=xr.open_dataset(self.grid_dir+'ECCOv4r3_grid_with_masks.nc')
+        
+        if var_list is None:
+            var_list = [var for var in self.data]
+        if masks is None:
+            masks = {'global':grid_ds.maskC.isel(k=0),}
+        if not label:
+            label=self.exp_dir.split('/')[-2]
+        
+        ds_out=[]
+        for mask in masks.keys():
+            ds_masked=self.data.where(masks[mask])
+            ad_mean=ds_masked.mean(dim=['i','j','i_g','j_g','tile'])
+            ad_mean['stat']='{}_mean'.format(mask)
+            ad_absmean=np.abs(ds_masked).mean(dim=['i','j','i_g','j_g','tile'])
+            ad_absmean['stat']='{}_absmean'.format(mask)
+            ds_mask=xr.concat([ad_mean,ad_absmean],'stat')
+            ds_out.append(ds_mask)
+        ds_out=xr.concat(ds_out,'stat')
+        if save:
+            ds_out=ds_out.load()
+            ds_out.to_netcdf('{}{}_{}.nc'.format(self.exp_dir,label,'tseries'))
+        
+        return ds_out[var_list]
+    
+    def animate(self,var_list=None,label=None,proj_dict={'projection_type':'stereo','lat_lim':-20},axlims=None,clims=None,tsteps=120):
+        '''
+        Creates gifs of sensitivities listed, or else all loaded
+        
+        Parameters
+        ----------
+        var_list : list, optional
+            List of variables to calculate timeseries for
+        label : string, optional.
+            Label to add to front of figure name, defaults to expt name derived from self.exp_dir
+        proj_dict : dictionary, optional
+            Projection options for spatial plots, defaults to Southern Ocean polar stereo
+        clims : dictionary, optional
+            Colorbar limits for each variable, in the form {variable:limit}, limits always symmetric from -limit to limit. Defaults to 70% max.
+        tsteps : number of tsteps to animate, defaults to 120
+            
+        Returns
+        -------
+        None
+        
+        '''
+        grid_ds=xr.open_dataset(self.grid_dir+'ECCOv4r3_grid_with_masks.nc')
+        if var_list is None:
+            var_list = [var for var in self.data]
+        if not label:
+            label=self.exp_dir.split('/')[-2] 
+            
+        for var in var_list:     
+            if not clims:
+                clim=np.abs(myexp.data[var]).max()*0.7
+            else:
+                clim=clims[var]
+            
+            fig=plt.figure(figsize=[9,5])
+            [p,ax]=_plot_ecco(grid_ds,self.data[var].isel(time=0),cmin=-clim,cmax=clim,**proj_dict)
+            if axlims:
+                ax.set_extent(axlims, crs=ccrs.PlateCarree())   
+
+            def animate(i):
+                A=self.data[var].isel(time=-tsteps+i)
+                [p,ax]=_plot_ecco(grid_ds,A,cmin=-clims[var],cmax=clims[var],**proj_dict)
+                if axlims:
+                    ax.set_extent(axlims, crs=ccrs.PlateCarree())
+                plt.title('{}\n Lag = {:2.2f}y, {}'.format(var,A.lag_years.data,A.time.dt.strftime("%Y-%m-%d").data))   
+                if np.mod(i,10)==0:
+                    print(i)
+
+            #anim = animation.ArtistAnimation(fig, all_ims, interval=50, blit=False)
+            anim = animation.FuncAnimation(fig, animate,frames=tsteps-1, interval=75, blit=False)
+            anim.save('../plots/animations/{}_{}.gif'.format(label,var))
+            plt.show()
     
     # Calculate stats with optional sigma multiplier    
 #    def calc_stats(self,sigma=None,sigma_type=None): 
@@ -279,10 +424,17 @@ def _get_time_data(exp_dir,start_date,lag0,deltat) :
     tdata['lag_days']=np.empty(nits)
     tdata['lag_years']=np.empty(nits)
     for i in range(nits):
-        tdata['its'][i]=int(itin[i])
-        tdata['dates'][i]=start_date+np.timedelta64(int(itin[i])*deltat,'s')
-        tdata['lag_days'][i]=(tdata['dates'][i]-lag0)/np.timedelta64(1,'D')
-        tdata['lag_years'][i]=tdata['lag_days'][i]/365.25
+        try:           
+            tdata['its'][i]=int(itin[i])
+            tdata['dates'][i]=start_date+np.timedelta64(int(itin[i])*deltat,'s')
+            tdata['lag_days'][i]=(tdata['dates'][i]-lag0)/np.timedelta64(1,'D')
+            tdata['lag_years'][i]=tdata['lag_days'][i]/365.25
+        except: # Sometimes get empty lines in its_ad.txt for it 0
+            tdata['its'][i]=0
+            tdata['dates'][i]=start_date
+            tdata['lag_days'][i]=(tdata['dates'][i]-lag0)/np.timedelta64(1,'D')
+            tdata['lag_years'][i]=tdata['lag_days'][i]/365.25
+            
     del itin,nits
     return tdata     
 
@@ -306,8 +458,12 @@ def _parse_vartype(vartype,ndims):
     return dims
 
 def _add_time_coords(var_ds,time_data):
-    var_ds['time']=time_data['dates']
+    var_ds['time']=time_data['dates'].astype('datetime64[ns]')
     var_ds=var_ds.assign_coords(lag_days=("time",time_data['lag_days']))
     var_ds=var_ds.assign_coords(lag_years=("time",time_data['lag_years']))
     return var_ds
         
+def _plot_ecco(ecco_grid,dplot,cmap='RdBu_r',show_colorbar=True,**kwargs):
+    [p,ax]=ecco.plot_proj_to_latlon_grid(ecco_grid.XC,ecco_grid.YC,dplot,show_colorbar=show_colorbar,
+                                    cmap=cmap,**kwargs)[:2]
+    return [p,ax]
