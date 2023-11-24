@@ -9,9 +9,9 @@ import os
 import numpy as np
 import glob
 import xmitgcm
+import xarray as xr
 from .inputs import adxx_it
 from .inputs import adj_dict
-import xarray as xr
 import ecco_v4_py as ecco
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
@@ -50,8 +50,8 @@ class Experiment(object):
         self.deltat=int(deltat)
         
         # Generate various time dimensions
-        self.time_data=_get_time_data(self.exp_dir,self.start_date,self.lag0,self.deltat)
         self._find_results()
+        self.time_data=_get_time_data(self)
         
     def __repr__(self):
         out_str = '<xadjoint.Experiment> \n Directories: \n\t experiment = {} \n\t grid = {}'.format(self.exp_dir,self.grid_dir)     
@@ -73,11 +73,12 @@ class Experiment(object):
         '''
         # find all ADJ meta files at first it
         self.ADJ_vars=[]
-        allADJ = [os.path.basename(x) for x in glob.glob(self.exp_dir+'ADJ*'+'{:010.0f}'.format(self.time_data['its'][0])+'.meta')]
+        allADJ = [os.path.basename(x).split('.')[0] for x in glob.glob(self.exp_dir+'ADJ*.meta')]
+        allADJ = np.unique(allADJ)
         for item in allADJ:
             #i1 = item.find('ADJ')
-            i2 = item.find('.')
-            self.ADJ_vars.append(item[:i2])
+           # i2 = item.find('.')
+            self.ADJ_vars.append(item)
         del allADJ
         print('Found {:d} ADJ variables'.format(len(self.ADJ_vars)))
         
@@ -259,6 +260,9 @@ class Experiment(object):
         grid_ds=xr.open_dataset(self.grid_dir+'ECCOv4r3_grid_with_masks.nc')
         ad_mean=self.data.mean(dim=['i','j','i_g','j_g','tile'])
         ad_absmean=np.abs(self.data).mean(dim=['i','j','i_g','j_g','tile'])
+        if 'k' in ad_mean.dims:
+            ad_mean=ad_mean.mean('k')
+            ad_absmean=ad_absmean.mean('k')
         for var in self.data:
             fig=plt.figure(figsize=[12,5])
             ax=plt.subplot(1,2,1)
@@ -270,9 +274,13 @@ class Experiment(object):
             plt.legend(fontsize=12)
             peakt=ad_absmean[var].argmax(dim='time').load()
             clim=np.abs(self.data[var].isel(time=peakt)).max().load()*0.7
-            [p,ax]=_plot_ecco(grid_ds,self.data[var].isel(time=peakt),subplot_grid=[1,2,2],**proj_dict,cmin=-clim,cmax=clim)
+            if 'k' in self.data[var].dims:
+                [p,ax]=_plot_ecco(grid_ds,self.data[var].isel(time=peakt).mean('k'),subplot_grid=[1,2,2],**proj_dict,cmin=-clim,cmax=clim)
+                plt.suptitle(adj_dict[var]['varlabel']+' depth mean',fontsize=14,fontweight='bold')
+            else:
+                [p,ax]=_plot_ecco(grid_ds,self.data[var].isel(time=peakt),subplot_grid=[1,2,2],**proj_dict,cmin=-clim,cmax=clim)
+                plt.suptitle(adj_dict[var]['varlabel'],fontsize=14,fontweight='bold')
             plt.title('Lag {:1.1f}y'.format(self.data['lag_years'][peakt].data),fontsize=12,fontweight='bold')
-            plt.suptitle(adj_dict[var]['varlabel'],fontsize=14,fontweight='bold')
             if axlims:
                 ax.set_extent(axlims, crs=ccrs.PlateCarree())
             if save:                
@@ -325,7 +333,7 @@ class Experiment(object):
         
         return ds_out[var_list]
     
-    def animate(self,var_list=None,label=None,proj_dict={'projection_type':'stereo','lat_lim':-20},axlims=None,clims=None,tsteps=120):
+    def animate(self,var_list=None,label=None,proj_dict={'projection_type':'stereo','lat_lim':-20},axlims=None,clims=None,tsteps=120,plots_dir=None):
         '''
         Creates gifs of sensitivities listed, or else all loaded
         
@@ -340,6 +348,9 @@ class Experiment(object):
         clims : dictionary, optional
             Colorbar limits for each variable, in the form {variable:limit}, limits always symmetric from -limit to limit. Defaults to 70% max.
         tsteps : number of tsteps to animate, defaults to 120
+        plots_dir: string, optional.
+            Where to save figures. Default None, saves in working dir
+        
             
         Returns
         -------
@@ -374,7 +385,9 @@ class Experiment(object):
 
             #anim = animation.ArtistAnimation(fig, all_ims, interval=50, blit=False)
             anim = animation.FuncAnimation(fig, animate,frames=tsteps-1, interval=75, blit=False)
-            anim.save('../plots/animations/{}_{}.gif'.format(label,var))
+            if not label:
+                    label=self.exp_dir.split('/')[-2]
+            anim.save('{}{}_{}.gif'.format(plots_dir,label,var))
             plt.show()
     
     # Calculate stats with optional sigma multiplier    
@@ -412,11 +425,14 @@ class Experiment(object):
         
 
         
-def _get_time_data(exp_dir,start_date,lag0,deltat) :   
+def _get_time_data(self) :   
     
     tdata={}
-    with open(exp_dir+'its_ad.txt') as f:
-        itin = f.readlines()
+    try:
+        with open(self.exp_dir+'its_ad.txt') as f:
+            itin = f.readlines()
+    except:
+        itin = [int(os.path.basename(x).split('.')[-2]) for x in glob.glob(self.exp_dir+'{}.*.data'.format(self.ADJ_vars[0]))]
     nits=len(itin)
     tdata['nits'] = nits   
     tdata['its'] = np.zeros(nits,dtype='int')
@@ -426,13 +442,13 @@ def _get_time_data(exp_dir,start_date,lag0,deltat) :
     for i in range(nits):
         try:           
             tdata['its'][i]=int(itin[i])
-            tdata['dates'][i]=start_date+np.timedelta64(int(itin[i])*deltat,'s')
-            tdata['lag_days'][i]=(tdata['dates'][i]-lag0)/np.timedelta64(1,'D')
+            tdata['dates'][i]=self.start_date+np.timedelta64(int(itin[i])*self.deltat,'s')
+            tdata['lag_days'][i]=(tdata['dates'][i]-self.lag0)/np.timedelta64(1,'D')
             tdata['lag_years'][i]=tdata['lag_days'][i]/365.25
         except: # Sometimes get empty lines in its_ad.txt for it 0
             tdata['its'][i]=0
-            tdata['dates'][i]=start_date
-            tdata['lag_days'][i]=(tdata['dates'][i]-lag0)/np.timedelta64(1,'D')
+            tdata['dates'][i]=self.start_date
+            tdata['lag_days'][i]=(tdata['dates'][i]-self.lag0)/np.timedelta64(1,'D')
             tdata['lag_years'][i]=tdata['lag_days'][i]/365.25
             
     del itin,nits
