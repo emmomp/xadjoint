@@ -6,19 +6,19 @@ Created on Wed Dec 18 10:35:41 2019
 @author: emmomp
 """
 import os
-import numpy as np
 import glob
 import xmitgcm
+import numpy as np
 import xarray as xr
-from .inputs import adxx_it
-from .inputs import adj_dict
 import ecco_v4_py as ecco
 import matplotlib.pyplot as plt
-import cartopy.crs as ccrs
 from matplotlib import animation
+import cartopy.crs as ccrs
+from .inputs import adxx_it
+from .inputs import adj_dict
 
 
-class Experiment(object):
+class Experiment():
     """
     Representation of specific MITgcm adjoint experiment run in ECCOv4
     """
@@ -55,6 +55,9 @@ class Experiment(object):
         self._find_results()
         self.time_data = _get_time_data(self)
 
+        # Define empty data attribute
+        self.data=None
+
     def __repr__(self):
         out_str = "<xadjoint.Experiment> \n Directories: \n\t experiment = {} \n\t grid = {}".format(
             self.exp_dir, self.grid_dir
@@ -78,7 +81,7 @@ class Experiment(object):
                 str(self.ADJ_vars), str(self.adxx_vars)
             )
         )
-        if "data" in vars(self):
+        if self.data is not None:
             out_str = out_str + "\n Data loaded: " + str(self.data)
         else:
             out_str = (
@@ -151,18 +154,18 @@ class Experiment(object):
         datasets = []
         for var in var_list:
             print("Reading in " + var)
-            if var not in adj_dict.keys():
+            if var not in adj_dict:
                 raise ValueError(
                     "{} not found in adj_dict. Please add details of variable to inputs.py".format(
                         var
                     )
                 )
 
-            if "vartype" in adj_dict[var].keys():
+            if "vartype" in adj_dict[var]:
                 dims = _parse_vartype(adj_dict[var]["vartype"], adj_dict[var]["ndims"])
             else:
                 dims = None
-            if "attrs" in adj_dict[var].keys():
+            if "attrs" in adj_dict[var]:
                 attrs = adj_dict[var]["attrs"]
             else:
                 attrs = {}
@@ -182,7 +185,7 @@ class Experiment(object):
                     )
                     var_ds = var_ds.rename({"face": "tile"})
                 else:
-                    extra_variable = {var: dict(dims=dims, attrs=attrs)}
+                    extra_variable = {var: {'dims':dims, 'attrs':attrs}}
                     var_ds = xmitgcm.open_mdsdataset(
                         data_dir=self.exp_dir,
                         grid_dir=self.grid_dir,
@@ -277,8 +280,7 @@ class Experiment(object):
 
             datasets.append(var_ds)
             del var_ds
-        # At to existing data or create new attr
-        if hasattr(self, "data"):
+        if self.data is not None:
             self.data = xr.combine_by_coords(
                 [
                     self.data,
@@ -323,7 +325,7 @@ class Experiment(object):
             self.load_vars(var_list)
         else:
             if var_list is None:
-                var_list = [var for var in self.data]
+                var_list = list(self.data)
             else:
                 if var_list == "ALL":
                     var_list = [*self.ADJ_vars, *self.adxx_vars]
@@ -349,7 +351,7 @@ class Experiment(object):
         save=False,
         plots_dir=None,
         label=None,
-        proj_dict={"projection_type": "stereo", "lat_lim": -20},
+        proj_dict=None,
         axlims=None,
     ):
         """
@@ -371,6 +373,8 @@ class Experiment(object):
         None.
 
         """
+        if proj_dict is None:
+            proj_dict={"projection_type": "stereo", "lat_lim": -20}
         grid_ds = xr.open_dataset(self.grid_dir + "ECCOv4r3_grid_with_masks.nc")
         ad_mean = self.data.mean(dim=["i", "j", "i_g", "j_g", "tile"])
         ad_absmean = np.abs(self.data).mean(dim=["i", "j", "i_g", "j_g", "tile"])
@@ -378,7 +382,7 @@ class Experiment(object):
             ad_mean = ad_mean.mean("k")
             ad_absmean = ad_absmean.mean("k")
         for var in self.data:
-            fig = plt.figure(figsize=[12, 5])
+            plt.figure(figsize=[12, 5])
             ax = plt.subplot(1, 2, 1)
             ad_mean[var].plot(x="lag_years", label="<dJ>", ax=ax)
             ad_absmean[var].plot(x="lag_years", label="<|dJ|>", ax=ax)
@@ -389,7 +393,7 @@ class Experiment(object):
             peakt = ad_absmean[var].argmax(dim="time").load()
             clim = np.abs(self.data[var].isel(time=peakt)).max().load() * 0.7
             if "k" in self.data[var].dims:
-                [p, ax] = _plot_ecco(
+                [_, ax] = _plot_ecco(
                     grid_ds,
                     self.data[var].isel(time=peakt).mean("k"),
                     subplot_grid=[1, 2, 2],
@@ -403,7 +407,7 @@ class Experiment(object):
                     fontweight="bold",
                 )
             else:
-                [p, ax] = _plot_ecco(
+                [_, ax] = _plot_ecco(
                     grid_ds,
                     self.data[var].isel(time=peakt),
                     subplot_grid=[1, 2, 2],
@@ -447,7 +451,7 @@ class Experiment(object):
         grid_ds = xr.open_dataset(self.grid_dir + "ECCOv4r3_grid_with_masks.nc")
 
         if var_list is None:
-            var_list = [var for var in self.data]
+            var_list = list(self.data)
         if masks is None:
             masks = {
                 "global": grid_ds.maskC.isel(k=0),
@@ -475,7 +479,7 @@ class Experiment(object):
         self,
         var_list=None,
         label=None,
-        proj_dict={"projection_type": "stereo", "lat_lim": -20},
+        proj_dict=None,
         axlims=None,
         clims=None,
         tsteps=120,
@@ -506,18 +510,20 @@ class Experiment(object):
         """
         grid_ds = xr.open_dataset(self.grid_dir + "ECCOv4r3_grid_with_masks.nc")
         if var_list is None:
-            var_list = [var for var in self.data]
+            var_list = list(self.data)
         if not label:
             label = self.exp_dir.split("/")[-2]
+        if proj_dict is None:
+            proj_dict ={"projection_type": "stereo", "lat_lim": -20}
 
         for var in var_list:
             if not clims:
-                clim = np.abs(myexp.data[var]).max() * 0.7
+                clim = np.abs(self.data[var]).max() * 0.7
             else:
                 clim = clims[var]
 
             fig = plt.figure(figsize=[9, 5])
-            [p, ax] = _plot_ecco(
+            [_, ax] = _plot_ecco(
                 grid_ds, self.data[var].isel(time=0), cmin=-clim, cmax=clim, **proj_dict
             )
             if axlims:
@@ -525,7 +531,7 @@ class Experiment(object):
 
             def animate(i):
                 A = self.data[var].isel(time=-tsteps + i)
-                [p, ax] = _plot_ecco(
+                [_, ax] = _plot_ecco(
                     grid_ds, A, cmin=-clims[var], cmax=clims[var], **proj_dict
                 )
                 if axlims:

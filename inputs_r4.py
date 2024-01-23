@@ -52,7 +52,7 @@ Optional elements:
 adj_dict = {
     "ADJtheta": {
         "adjtype": "ADJ",
-        "varlabel": "dJ/d$\Theta$",
+        "varlabel": "dJ/d$\\Theta$",
         "ECCOname": "THETA",
         "vartype": "c",
         "ndims": 3,
