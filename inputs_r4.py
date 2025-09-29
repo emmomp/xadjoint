@@ -120,6 +120,15 @@ adj_dict = {
         "attrs": {"long_name": "Sensitivity to Y Wind Stress", "units": "[J]/N/m^2"},
         "fact": 0.06,
     },
+    "ADJptracer01": {
+        "adjtype": "ADJ",
+        "varlabel": "dJ/d$C$",
+        "ECCOname": "PTRACER01",
+        "vartype": "c",
+        "ndims": 3,
+        "attrs": {"long_name": "Sensitivity to PTRACER", "units": "n/a"},
+      #  "fact": 0.06,
+    },
     "adxx_empmr": {
         "adjtype": "adxx",
         "varlabel": "dJ/d(E-P-R)",
