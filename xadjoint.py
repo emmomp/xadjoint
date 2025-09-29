@@ -23,7 +23,7 @@ class Experiment():
     Representation of specific MITgcm adjoint experiment run in ECCOv4
     """
 
-    def __init__(self, grid_dir, exp_dir, start_date, lag0, deltat=3600):
+    def __init__(self, grid_dir, exp_dir, start_date, lag0, deltat=3600, adj_freq=1209600, nt=260):
         """
         Initialise Exp object based on user data
 
@@ -39,7 +39,11 @@ class Experiment():
             Lag 0 for cost function defined in *_maskT file
         deltat : int, default 3600
             Time step of forward model in seconds. The default is 3600 (one day).
-
+        adj_freq : int, default 1209600
+            Frequency of adjoint output in seconds. Default is 14 days=1209600 secs
+        nt : int, default 104
+            Number of output timesteps in the adjoint sensitivity files
+ 
         """
 
         # Assign directories
@@ -50,6 +54,8 @@ class Experiment():
         self.start_date = np.datetime64(start_date)
         self.lag0 = np.datetime64(lag0)
         self.deltat = int(deltat)
+        self.adjfreq = int(adj_freq)
+        self.nits= int(nt)
 
         # Generate various time dimensions
         self._find_results()
@@ -67,7 +73,7 @@ class Experiment():
             + "\n Time Data: \n\t Start Date {}, Lag Zero {} \n\t {} timesteps, deltat = {}".format(
                 str(self.start_date),
                 str(self.lag0),
-                str(self.time_data["nits"]),
+                str(self.nits),
                 str(self.deltat),
             )
         )
@@ -138,7 +144,7 @@ class Experiment():
     # Load adjoint files (assumes nz=1 for adxx vars)
     def load_vars(self, var_list="ALL"):
         """
-        Load user specified list of variables into xarray DataSet placed in self.data.
+        'Load' (lazily) user specified list of variables into xarray DataSet placed in self.data.
         Will overwrite any previously loaded variables with the same name.
 
         Parameters
@@ -204,33 +210,16 @@ class Experiment():
 
             elif var in self.adxx_vars:
                 if adj_dict[var]["ndims"] == 3:
-                    var_data = xmitgcm.utils.read_3d_llc_data(
-                        fname=self.exp_dir
-                        + "/"
-                        + var
-                        + "."
-                        + "{:010.0f}".format(adxx_it)
-                        + ".data",
-                        nz=50,
-                        nx=90,
-                        nrecs=self.time_data["nits"],
-                        dtype=">f4",
-                    )
+                    nz=50
                 elif adj_dict[var]["ndims"] == 2:
-                    var_data = xmitgcm.utils.read_3d_llc_data(
-                        fname=self.exp_dir
-                        + "/"
-                        + var
-                        + "."
-                        + "{:010.0f}".format(adxx_it)
-                        + ".data",
-                        nz=1,
-                        nx=90,
-                        nrecs=self.time_data["nits"],
-                        dtype=">f4",
-                    )
+                    nz=1
                 else:
                     raise ValueError("Ndims of variables must be 2 or 3")
+                var_data=xmitgcm.utils.read_3d_llc_data(fname=f'{self.exp_dir}/{var}.{adxx_it:010.0f}.data',
+                        nz=nz,
+                        nx=90,
+                        nrecs=self.nits,
+                        dtype=">f4")
                 if isinstance(adj_dict[var]["vartype"], str):
                     if adj_dict[var]["ndims"] == 3:
                         var_ds = ecco.llc_tiles_to_xda(
@@ -249,27 +238,26 @@ class Experiment():
                 elif dims is None:
                     raise ValueError("Vartype must be defined for adxx fields")
                 else:
-                    grid_ds = xmitgcm.open_mdsdataset(
+                    with xmitgcm.open_mdsdataset(
                         iters=None,
                         read_grid=True,
                         geometry="llc",
                         prefix=var,
                         data_dir=self.exp_dir,
                         grid_dir=self.grid_dir,
-                    )
-                    dims = [
-                        "face",
-                    ] + dims
-                    newcoords = {k: grid_ds[k] for k in dims}
-                    dims = [
-                        "time",
-                    ] + dims
-                    newcoords["time"] = self.time_data["dates"]
-                    var_ds = xr.Dataset(
-                        data_vars={var: (dims, var_data)}, coords=newcoords
-                    )
-                    var_ds = var_ds.rename({"face": "tile"})
-                    del newcoords, grid_ds
+                    ) as grid_ds:
+                        dims = [
+                            "face",
+                        ] + dims
+                        newcoords = {k: grid_ds[k] for k in dims}
+                        dims = [
+                            "time",
+                        ] + dims
+                        newcoords["time"] = self.time_data["dates"]
+                        var_ds = xr.Dataset(
+                            data_vars={var: (dims, var_data)}, coords=newcoords
+                        )
+                        var_ds = var_ds.rename({"face": "tile"})
                 var_ds[var].attrs = attrs
                 var_ds = _add_time_coords(var_ds, self.time_data)
 
@@ -338,7 +326,7 @@ class Experiment():
         for var in var_list:
             print("Writing " + var)
             if split_timesteps:
-                for it in range(0, self.time_data["nits"]):
+                for it in range(0, self.nits):
                     file_name = "{}.{:010.0f}.nc".format(var, self.time_data["its"][it])
                     self.data[var].isel(time=it).to_netcdf(path=out_dir + file_name)
             else:
@@ -515,6 +503,8 @@ class Experiment():
             label = self.exp_dir.split("/")[-2]
         if proj_dict is None:
             proj_dict ={"projection_type": "stereo", "lat_lim": -20}
+        if plots_dir is None:
+            plots_dict ='./'
 
         for var in var_list:
             if not clims:
@@ -591,39 +581,26 @@ class Experiment():
 
 def _get_time_data(self):
     tdata = {}
-    try:
-        with open(self.exp_dir + "its_ad.txt") as f:
-            itin = f.readlines()
-    except:
-        itin = [
-            int(os.path.basename(x).split(".")[-2])
-            for x in glob.glob(self.exp_dir + "{}.*.data".format(self.ADJ_vars[0]))
-        ]
-    nits = len(itin)
-    tdata["nits"] = nits
+    nits = self.nits
     tdata["its"] = np.zeros(nits, dtype="int")
     tdata["dates"] = np.empty(nits, dtype="datetime64[D]")
     tdata["lag_days"] = np.empty(nits)
     tdata["lag_years"] = np.empty(nits)
-    for i in range(nits):
-        try:
-            tdata["its"][i] = int(itin[i])
-            tdata["dates"][i] = self.start_date + np.timedelta64(
-                int(itin[i]) * self.deltat, "s"
-            )
-            tdata["lag_days"][i] = (tdata["dates"][i] - self.lag0) / np.timedelta64(
-                1, "D"
-            )
-            tdata["lag_years"][i] = tdata["lag_days"][i] / 365.25
-        except:  # Sometimes get empty lines in its_ad.txt for it 0
-            tdata["its"][i] = 0
-            tdata["dates"][i] = self.start_date
-            tdata["lag_days"][i] = (tdata["dates"][i] - self.lag0) / np.timedelta64(
-                1, "D"
-            )
-            tdata["lag_years"][i] = tdata["lag_days"][i] / 365.25
+    delta_it=self.adjfreq/self.deltat
 
-    del itin, nits
+    for i in range(0,nits):
+        if i==0:
+            tdata['its'][i]=0+delta_it
+            tdata['dates'][i]=self.start_date + np.timedelta64(self.adjfreq,'s')
+        else:
+            tdata['its'][i]=tdata['its'][i-1]+delta_it
+            tdata['dates'][i]=tdata['dates'][i-1] + np.timedelta64(self.adjfreq,'s')
+        tdata['lag_days'][i]=(tdata['dates'][i] - self.lag0) / np.timedelta64(
+                1, "D"
+            )
+        tdata['lag_years'][i] = tdata['lag_days'][i] / 365.25
+
+    del nits, delta_it
     return tdata
 
 
