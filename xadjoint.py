@@ -280,7 +280,7 @@ class Experiment():
             self.data = xr.combine_by_coords(datasets, combine_attrs="drop_conflicts")
         del datasets
 
-    def to_nctiles(self, var_list=None, out_dir=None, split_timesteps=True):
+    def to_nctiles(self, label=None, var_list=None, out_dir=None, split_timesteps=True):
         """
         Writes data to nctiles format netcdf files, one per timestep (optional) matching ECCOv4r4 format
         Loads any variables not already read in.
@@ -289,6 +289,8 @@ class Experiment():
 
         Parameters
         ----------
+        label : string, optional
+            String to add to filenames, which will be [var]_[label].nc if present
         var_list : list, optional
             List of variables to be written to file. The default is to write the variables
             found in <experiment>.data.
@@ -296,7 +298,7 @@ class Experiment():
         out_dir : str, optional
             Where files are to be written. The default is the experiment directory.
         split_timesteps : boolean, optional
-            If True (default), writes one variable per timestep
+            If True (default), writes one file per timestep
 
         Returns
         -------
@@ -328,9 +330,13 @@ class Experiment():
             if split_timesteps:
                 for it in range(0, self.nits):
                     file_name = "{}.{:010.0f}.nc".format(var, self.time_data["its"][it])
+                    if label:
+                       file_name=f"{label}_{file_name}"
                     self.data[var].isel(time=it).to_netcdf(path=out_dir + file_name)
             else:
                 file_name = "{}.nc".format(var)
+                if label:
+                    file_name=f"{label}_{file_name}"
                 self.data[var].to_netcdf(path=out_dir + file_name)
         print("All files written to " + out_dir)
 
