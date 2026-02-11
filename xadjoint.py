@@ -14,7 +14,7 @@ import ecco_v4_py as ecco
 import matplotlib.pyplot as plt
 from matplotlib import animation
 import cartopy.crs as ccrs
-from .inputs import adxx_it
+#from .inputs import adxx_it
 from .inputs import adj_dict
 
 
@@ -23,7 +23,7 @@ class Experiment():
     Representation of specific MITgcm adjoint experiment run in ECCOv4
     """
 
-    def __init__(self, grid_dir, exp_dir, start_date, lag0, deltat=3600, adj_freq=1209600, nt=260):
+    def __init__(self, grid_dir, exp_dir, start_date, lag0, deltat=3600, adj_freq=1209600, nt=260, adxx_it=129):
         """
         Initialise Exp object based on user data
 
@@ -56,6 +56,7 @@ class Experiment():
         self.deltat = int(deltat)
         self.adjfreq = int(adj_freq)
         self.nits= int(nt)
+        self.adxx_it = int(adxx_it)
 
         # Generate various time dimensions
         self._find_results()
@@ -120,7 +121,7 @@ class Experiment():
         alladxx = [
             os.path.basename(x)
             for x in glob.glob(
-                self.exp_dir + "adxx_*" + "{:010.0f}".format(adxx_it) + ".meta"
+                self.exp_dir + "adxx_*" + "{:010.0f}".format(self.adxx_it) + ".meta"
             )
         ]
         for item in alladxx:
@@ -133,13 +134,13 @@ class Experiment():
         print("Found {:d} adxx variables".format(len(self.adxx_vars)))
 
         # find costfunction value
-        costfunction = glob.glob(self.exp_dir + "costfunction{:04.0f}".format(adxx_it))
+        costfunction = glob.glob(self.exp_dir + "costfunction{:04.0f}".format(self.adxx_it))
         try:
             with open(costfunction[0], "r") as file:
                 fc = file.readline()  # Read first line formatted 'fc = [costfunction]'
             self.fc = float(fc.split("=")[1].split(",")[0])
         except:
-            print("File costfunction{:04.0f} not found".format(adxx_it))
+            print("File costfunction{:04.0f} not found".format(self.adxx_it))
 
     # Load adjoint files (assumes nz=1 for adxx vars)
     def load_vars(self, var_list="ALL"):
@@ -215,10 +216,14 @@ class Experiment():
                     nz=1
                 else:
                     raise ValueError("Ndims of variables must be 2 or 3")
-                var_data=xmitgcm.utils.read_3d_llc_data(fname=f'{self.exp_dir}/{var}.{adxx_it:010.0f}.data',
+                if adj_dict[var]["const"]:
+                    nrecs=1
+                else:
+                    nrecs=self.nits
+                var_data=xmitgcm.utils.read_3d_llc_data(fname=f'{self.exp_dir}/{var}.{self.adxx_it:010.0f}.data',
                         nz=nz,
                         nx=90,
-                        nrecs=self.nits,
+                        nrecs=nrecs,
                         dtype=">f4")
                 if isinstance(adj_dict[var]["vartype"], str):
                     if adj_dict[var]["ndims"] == 3:
@@ -259,14 +264,15 @@ class Experiment():
                         )
                         var_ds = var_ds.rename({"face": "tile"})
                 var_ds[var].attrs = attrs
-                var_ds = _add_time_coords(var_ds, self.time_data)
+                if not adj_dict[var]["const"]:
+                    var_ds = _add_time_coords(var_ds, self.time_data)
 
                 # var_ds = xr.Dataset(data_vars={var:(vardims,var_data)},coords=newcords)
                 # var_ds = xr.combine_by_coords([grid_ds,var_ds])
             else:
                 print("variable " + var + " not found in " + self.exp_dir)
 
-            datasets.append(var_ds)
+            datasets.append(var_ds.squeeze())
             del var_ds
         if self.data is not None:
             self.data = xr.combine_by_coords(
@@ -376,45 +382,69 @@ class Experiment():
             ad_mean = ad_mean.mean("k")
             ad_absmean = ad_absmean.mean("k")
         for var in self.data:
-            plt.figure(figsize=[12, 5])
-            ax = plt.subplot(1, 2, 1)
-            ad_mean[var].plot(x="lag_years", label="<dJ>", ax=ax)
-            ad_absmean[var].plot(x="lag_years", label="<|dJ|>", ax=ax)
-            plt.axhline(0, color="k")
-            plt.xlabel("Lag (y)", fontsize=12)
-            plt.ylabel("")
-            plt.legend(fontsize=12)
-            peakt = ad_absmean[var].argmax(dim="time").load()
-            clim = np.abs(self.data[var].isel(time=peakt)).max().load() * 0.7
-            if "k" in self.data[var].dims:
-                [_, ax] = _plot_ecco(
-                    grid_ds,
-                    self.data[var].isel(time=peakt).mean("k"),
-                    subplot_grid=[1, 2, 2],
-                    **proj_dict,
-                    cmin=-clim,
-                    cmax=clim
-                )
-                plt.suptitle(
-                    adj_dict[var]["varlabel"] + " depth mean",
-                    fontsize=14,
+            if 'time' in self.data[var].dims:
+                plt.figure(figsize=[12, 5])
+                ax = plt.subplot(1, 2, 1)
+                ad_mean[var].plot(x="lag_years", label="<dJ>", ax=ax)
+                ad_absmean[var].plot(x="lag_years", label="<|dJ|>", ax=ax)
+                plt.axhline(0, color="k")
+                plt.xlabel("Lag (y)", fontsize=12)
+                plt.ylabel("")
+                plt.legend(fontsize=12)
+                peakt = ad_absmean[var].argmax(dim="time").load()
+                clim = np.abs(self.data[var].isel(time=peakt)).max().load() * 0.7
+                if "k" in self.data[var].dims:
+                    [_, ax] = _plot_ecco(
+                        grid_ds,
+                        self.data[var].isel(time=peakt).mean("k"),
+                        subplot_grid=[1, 2, 2],
+                        **proj_dict,
+                        cmin=-clim,
+                        cmax=clim
+                    )
+                    plt.suptitle(
+                        adj_dict[var]["varlabel"] + " depth mean",
+                        fontsize=14,
+                        fontweight="bold",
+                    )
+                else:
+                    [_, ax] = _plot_ecco(
+                        grid_ds,
+                        self.data[var].isel(time=peakt),
+                        subplot_grid=[1, 2, 2],
+                        **proj_dict,
+                        cmin=-clim,
+                        cmax=clim
+                    )
+                    plt.suptitle(adj_dict[var]["varlabel"], fontsize=14, fontweight="bold")
+                plt.title(
+                    "Lag {:1.1f}y".format(self.data["lag_years"][peakt].data),
+                    fontsize=12,
                     fontweight="bold",
                 )
             else:
-                [_, ax] = _plot_ecco(
-                    grid_ds,
-                    self.data[var].isel(time=peakt),
-                    subplot_grid=[1, 2, 2],
-                    **proj_dict,
-                    cmin=-clim,
-                    cmax=clim
-                )
-                plt.suptitle(adj_dict[var]["varlabel"], fontsize=14, fontweight="bold")
-            plt.title(
-                "Lag {:1.1f}y".format(self.data["lag_years"][peakt].data),
-                fontsize=12,
-                fontweight="bold",
-            )
+                if "k" in self.data[var].dims:
+                    [_, ax] = _plot_ecco(
+                        grid_ds,
+                        self.data[var].mean("k"),
+                        **proj_dict,
+                        cmin=-clim,
+                        cmax=clim
+                    )
+                    plt.title(
+                        adj_dict[var]["varlabel"] + " depth mean",
+                        fontsize=14,
+                        fontweight="bold",
+                    )
+                else:
+                    [_, ax] = _plot_ecco(
+                        grid_ds,
+                        self.data[var],
+                        **proj_dict,
+                        cmin=-clim,
+                        cmax=clim
+                    )
+                    plt.title(adj_dict[var]["varlabel"], fontsize=14, fontweight="bold")
             if axlims:
                 ax.set_extent(axlims, crs=ccrs.PlateCarree())
             if save:
@@ -631,9 +661,14 @@ def _parse_vartype(vartype, ndims):
 
 
 def _add_time_coords(var_ds, time_data):
+    if len(var_ds.time)<len(time_data["dates"]):
+        ndst=len(var_ds.time)
+        time_data["dates"] = time_data["dates"][-ndst:]
+        time_data["lag_days"] = time_data["lag_days"][-ndst:]
+        time_data["lag_years"] = time_data["lag_years"][-ndst:]
     var_ds["time"] = time_data["dates"].astype("datetime64[ns]")
     var_ds = var_ds.assign_coords(lag_days=("time", time_data["lag_days"]))
-    var_ds = var_ds.assign_coords(lag_years=("time", time_data["lag_years"]))
+    var_ds = var_ds.assign_coords(lag_years=("time", time_data["lag_years"]))        
     return var_ds
 
 
