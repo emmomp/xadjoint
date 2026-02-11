@@ -139,6 +139,7 @@ adj_dict = {
             "long_name": "Sensitivity to Evaporation-Precipitation-Runoff",
             "units": "[J]/m/s",
         },
+        "const": False,
         "fact": 2.0e-8,
     },
     "adxx_sst": {
@@ -147,6 +148,7 @@ adj_dict = {
         "ECCOname": "EXFtheta",
         "vartype": "c",
         "ndims": 2,
+        "const": False,
         "attrs": {
             "long_name": "Sensitivity to Surface Potential Temperature",
             "units": "[J]/Degree C",
@@ -158,6 +160,7 @@ adj_dict = {
         "ECCOname": "EXFtheta",
         "vartype": "c",
         "ndims": 2,
+        "const": False,
         "attrs": {"long_name": "Sensitivity to Surface Salinity", "units": "[J]/psu"},
     },
     "adxx_qnet": {
@@ -168,6 +171,7 @@ adj_dict = {
         "ndims": 2,
         "attrs": {"long_name": "Sensitivity to Net Heat Flux", "units": "[J]/W/m^2"},
         "fact": 60.0,
+        "const": False,
     },
     "adxx_tauu": {
         "adjtype": "adxx",
@@ -181,6 +185,7 @@ adj_dict = {
             "units": "[J]/N/m^2",
         },
         "fact": 0.08,
+        "const": False,
     },
     "adxx_tauv": {
         "adjtype": "adxx",
@@ -193,6 +198,7 @@ adj_dict = {
             "units": "[J]/N/m^2",
         },
         "fact": 0.06,
+        "const": False,
     },
     "adxx_uwind": {
         "adjtype": "adxx",
@@ -202,6 +208,7 @@ adj_dict = {
         "ndims": 2,
         "attrs": {"long_name": "Sensitivity to 10m Zonal Wind", "units": "[J]/m/s"},
         "fact": 1.6,
+        "const": False,
     },
     "adxx_vwind": {
         "adjtype": "adxx",
@@ -214,6 +221,7 @@ adj_dict = {
             "units": "[J]/m/s",
         },
         "fact": 1.6,
+        "const": False,
     },
     "adxx_theta": {
         "adjtype": "adxx",
@@ -225,6 +233,18 @@ adj_dict = {
             "long_name": "Sensitivity to Initial Potential Temperature",
             "units": "[J]/Degree C",
         },
-        "fact": 1.6,
+        "const": True,
+    },
+    "adxx_salt": {
+        "adjtype": "adxx",
+        "varlabel": "dJ/dS",
+        "ECCOname": "EXFsalt",
+        "vartype": "c",
+        "ndims": 3,
+        "attrs": {
+            "long_name": "Sensitivity to Initial Salinity",
+            "units": "[J]/PSU",
+        },
+        "const": True,
     },
 }
