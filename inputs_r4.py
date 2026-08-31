@@ -225,7 +225,7 @@ adj_dict = {
     },
     "adxx_theta": {
         "adjtype": "adxx",
-        "varlabel": "dJ/d$\Theta$",
+        "varlabel": "dJ/d$\Theta_0$",
         "ECCOname": "EXFtheta",
         "vartype": "c",
         "ndims": 3,
@@ -237,7 +237,7 @@ adj_dict = {
     },
     "adxx_salt": {
         "adjtype": "adxx",
-        "varlabel": "dJ/dS",
+        "varlabel": "dJ/dS$_0$",
         "ECCOname": "EXFsalt",
         "vartype": "c",
         "ndims": 3,
