@@ -14,16 +14,15 @@ import ecco_v4_py as ecco
 import matplotlib.pyplot as plt
 from matplotlib import animation
 import cartopy.crs as ccrs
-#from .inputs import adxx_it
-from .inputs import adj_dict
-
+import json
+import importlib.resources
 
 class Experiment():
     """
     Representation of specific MITgcm adjoint experiment run in ECCOv4
     """
 
-    def __init__(self, grid_dir, exp_dir, start_date, lag0, deltat=3600, adj_freq=1209600, nt=260, adxx_it=129):
+    def __init__(self, grid_dir, exp_dir, start_date, lag0, deltat=3600, adj_freq=1209600, nt=260, version='r4'):
         """
         Initialise Exp object based on user data
 
@@ -45,6 +44,15 @@ class Experiment():
             Number of output timesteps in the adjoint sensitivity files
  
         """
+        with importlib.resources.open_text("xadjoint", f"inputs_{version}.json") as ff: 
+            print('Loading adjoint dict')
+            self.adj_dict = json.load(ff)
+        if version == 'r4':
+            self.adxx_it=129
+        elif version in ['r2','r2_DIC']:
+            self.adxx_it=12
+        elif version ==  'r5':
+            self.adxx_it=180
 
         # Assign directories
         self.grid_dir = grid_dir
@@ -56,7 +64,6 @@ class Experiment():
         self.deltat = int(deltat)
         self.adjfreq = int(adj_freq)
         self.nits= int(nt)
-        self.adxx_it = int(adxx_it)
 
         # Generate various time dimensions
         self._find_results()
@@ -161,23 +168,23 @@ class Experiment():
         datasets = []
         for var in var_list:
             print("Reading in " + var)
-            if var not in adj_dict:
+            if var not in self.adj_dict:
                 raise ValueError(
-                    "{} not found in adj_dict. Please add details of variable to inputs.py".format(
+                    "{} not found in adj_dict. Please add details of variable to inputs.json".format(
                         var
                     )
                 )
 
-            if "vartype" in adj_dict[var]:
-                dims = _parse_vartype(adj_dict[var]["vartype"], adj_dict[var]["ndims"])
+            if "vartype" in self.adj_dict[var]:
+                dims = _parse_vartype(self.adj_dict[var]["vartype"], self.adj_dict[var]["ndims"])
             else:
                 dims = None
-            if "attrs" in adj_dict[var]:
-                attrs = adj_dict[var]["attrs"]
+            if "attrs" in self.adj_dict[var]:
+                attrs = self.adj_dict[var]["attrs"]
             else:
                 attrs = {}
 
-            if adj_dict[var]["adjtype"] == "ADJ":
+            if self.adj_dict[var]["adjtype"] == "ADJ":
                 if dims is None:
                     var_ds = xmitgcm.open_mdsdataset(
                         data_dir=self.exp_dir,
@@ -210,13 +217,13 @@ class Experiment():
                 var_ds = _add_time_coords(var_ds, self.time_data)
 
             elif var in self.adxx_vars:
-                if adj_dict[var]["ndims"] == 3:
+                if self.adj_dict[var]["ndims"] == 3:
                     nz=50
-                elif adj_dict[var]["ndims"] == 2:
+                elif self.adj_dict[var]["ndims"] == 2:
                     nz=1
                 else:
                     raise ValueError("Ndims of variables must be 2 or 3")
-                if adj_dict[var]["const"]:
+                if self.adj_dict[var]["const"]:
                     nrecs=1
                 else:
                     nrecs=self.nits
@@ -225,17 +232,17 @@ class Experiment():
                         nx=90,
                         nrecs=nrecs,
                         dtype=">f4")
-                if isinstance(adj_dict[var]["vartype"], str):
-                    if adj_dict[var]["ndims"] == 3:
+                if isinstance(self.adj_dict[var]["vartype"], str):
+                    if self.adj_dict[var]["ndims"] == 3:
                         var_ds = ecco.llc_tiles_to_xda(
                             var_data,
-                            var_type=adj_dict[var]["vartype"],
+                            var_type=self.adj_dict[var]["vartype"],
                             dim4="depth",
                             dim5="time",
                         )
-                    elif adj_dict[var]["ndims"] == 2:
+                    elif self.adj_dict[var]["ndims"] == 2:
                         var_ds = ecco.llc_tiles_to_xda(
-                            var_data, var_type=adj_dict[var]["vartype"], dim4="time"
+                            var_data, var_type=self.adj_dict[var]["vartype"], dim4="time"
                         )
                     else:
                         raise ValueError("Ndims of variables must be 2 or 3")
@@ -264,7 +271,7 @@ class Experiment():
                         )
                         var_ds = var_ds.rename({"face": "tile"})
                 var_ds[var].attrs = attrs
-                if not adj_dict[var]["const"]:
+                if not self.adj_dict[var]["const"]:
                     var_ds = _add_time_coords(var_ds, self.time_data)
 
                 # var_ds = xr.Dataset(data_vars={var:(vardims,var_data)},coords=newcords)
@@ -382,8 +389,8 @@ class Experiment():
             ad_mean = ad_mean.mean("k")
             ad_absmean = ad_absmean.mean("k")
         for var in self.data:
+            plt.figure(figsize=[12, 5])
             if 'time' in self.data[var].dims:
-                plt.figure(figsize=[12, 5])
                 ax = plt.subplot(1, 2, 1)
                 ad_mean[var].plot(x="lag_years", label="<dJ>", ax=ax)
                 ad_absmean[var].plot(x="lag_years", label="<|dJ|>", ax=ax)
@@ -403,7 +410,7 @@ class Experiment():
                         cmax=clim
                     )
                     plt.suptitle(
-                        adj_dict[var]["varlabel"] + " depth mean",
+                        self.adj_dict[var]["varlabel"] + " depth mean",
                         fontsize=14,
                         fontweight="bold",
                     )
@@ -416,7 +423,7 @@ class Experiment():
                         cmin=-clim,
                         cmax=clim
                     )
-                    plt.suptitle(adj_dict[var]["varlabel"], fontsize=14, fontweight="bold")
+                    plt.suptitle(self.adj_dict[var]["varlabel"], fontsize=14, fontweight="bold")
                 plt.title(
                     "Lag {:1.1f}y".format(self.data["lag_years"][peakt].data),
                     fontsize=12,
@@ -432,7 +439,7 @@ class Experiment():
                         cmax=clim
                     )
                     plt.title(
-                        adj_dict[var]["varlabel"] + " depth mean",
+                        self.adj_dict[var]["varlabel"] + " depth mean",
                         fontsize=14,
                         fontweight="bold",
                     )
@@ -444,7 +451,7 @@ class Experiment():
                         cmin=-clim,
                         cmax=clim
                     )
-                    plt.title(adj_dict[var]["varlabel"], fontsize=14, fontweight="bold")
+                    plt.title(self.adj_dict[var]["varlabel"], fontsize=14, fontweight="bold")
             if axlims:
                 ax.set_extent(axlims, crs=ccrs.PlateCarree())
             if save:
