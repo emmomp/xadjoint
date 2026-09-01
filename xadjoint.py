@@ -113,7 +113,7 @@ class Experiment():
         self.ADJ_vars = []
         allADJ = [
             os.path.basename(x).split(".")[0]
-            for x in os.path.join(self.exp_dir,"ADJ*.meta")
+            for x in glob.glob(os.path.join(self.exp_dir,"ADJ*.meta"))
         ]
         allADJ = np.unique(allADJ)
         for item in allADJ:
@@ -128,7 +128,7 @@ class Experiment():
         alladxx = [
             os.path.basename(x)
             for x in glob.glob(
-                self.exp_dir + "adxx_*" + "{:010.0f}".format(self.adxx_it) + ".meta"
+                os.path.join(self.exp_dir,f"adxx_*{adxx_it:010.0f}.meta")
             )
         ]
         for item in alladxx:
@@ -141,7 +141,7 @@ class Experiment():
         print("Found {:d} adxx variables".format(len(self.adxx_vars)))
 
         # find costfunction value
-        costfunction = glob.glob(self.exp_dir + "costfunction{:04.0f}".format(self.adxx_it))
+        costfunction = glob.glob(os.path.join(self.exp_dir,f"costfunction{adxx_it:04.0f}"))
         try:
             with open(costfunction[0], "r") as file:
                 fc = file.readline()  # Read first line formatted 'fc = [costfunction]'
@@ -161,7 +161,7 @@ class Experiment():
             Names of data variables to be loaded. If 'ALL', all will be loaded
 
         """
-        if var_list == "ALL":
+        if (var_list == "ALL") or (var_list is None):
             var_list = [*self.ADJ_vars, *self.adxx_vars]
 
         # Loop through and read variables
@@ -351,7 +351,7 @@ class Experiment():
                 file_name = "{}.nc".format(var)
                 if label:
                     file_name=f"{label}_{file_name}"
-                self.data[var].to_netcdf(path=out_dir + file_name)
+                self.data[var].to_netcdf(path=os.path.join(out_dir,file_name))
         print("All files written to " + out_dir)
 
     def quick_plots(
@@ -483,7 +483,7 @@ class Experiment():
         xarray dataset containing the mean and mean of the absolute values of the variables in var_list, in the regions specified in the dictionary masks
 
         """
-        grid_ds = xr.open_dataset(self.grid_dir + "ECCOv4r3_grid_with_masks.nc")
+        grid_ds = xr.open_dataset(os.path.join(self.grid_dir,"ECCOv4r3_grid_with_masks.nc"))
 
         if var_list is None:
             var_list = list(self.data)
@@ -543,7 +543,7 @@ class Experiment():
         None
 
         """
-        grid_ds = xr.open_dataset(self.grid_dir + "ECCOv4r3_grid_with_masks.nc")
+        grid_ds = xr.open_dataset(os.path.join(self.grid_dir,"ECCOv4r3_grid_with_masks.nc"))
         if var_list is None:
             var_list = list(self.data)
         if not label:
@@ -551,7 +551,7 @@ class Experiment():
         if proj_dict is None:
             proj_dict ={"projection_type": "stereo", "lat_lim": -20}
         if plots_dir is None:
-            plots_dict ='./'
+            plots_dir ='./'
 
         for var in var_list:
             if not clims:
@@ -569,10 +569,8 @@ class Experiment():
             def animate(i):
                 A = self.data[var].isel(time=-tsteps + i)
                 [_, ax] = _plot_ecco(
-                    grid_ds, A, cmin=-clim, cmax=clim, **proj_dict, ax=ax
+                    grid_ds, self.data[var].isel(time=0), cmin=-clim, cmax=clim, ax=ax, **proj_dict
                 )
-                if axlims:
-                    ax.set_extent(axlims, crs=ccrs.PlateCarree())
                 plt.title(
                     "{}\n Lag = {:2.2f}y, {}".format(
                         var, A.lag_years.data, A.time.dt.strftime("%Y-%m-%d").data
@@ -692,3 +690,4 @@ def _plot_ecco(ecco_grid, dplot, cmap="RdBu_r", show_colorbar=True, **kwargs):
         **kwargs
     )[:2]
     return [p, ax]
+
