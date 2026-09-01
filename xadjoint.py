@@ -37,10 +37,10 @@ class Experiment():
         lag0 : string
             Lag 0 for cost function defined in *_maskT file
         deltat : int, default 3600
-            Time step of forward model in seconds. The default is 3600 (one day).
+            Time step of forward model in seconds. The default is 3600 (one hour).
         adj_freq : int, default 1209600
             Frequency of adjoint output in seconds. Default is 14 days=1209600 secs
-        nt : int, default 104
+        nt : int, default 260
             Number of output timesteps in the adjoint sensitivity files
  
         """
@@ -113,7 +113,7 @@ class Experiment():
         self.ADJ_vars = []
         allADJ = [
             os.path.basename(x).split(".")[0]
-            for x in glob.glob(self.exp_dir + "ADJ*.meta")
+            for x in os.path.join(self.exp_dir,"ADJ*.meta")
         ]
         allADJ = np.unique(allADJ)
         for item in allADJ:
@@ -146,8 +146,8 @@ class Experiment():
             with open(costfunction[0], "r") as file:
                 fc = file.readline()  # Read first line formatted 'fc = [costfunction]'
             self.fc = float(fc.split("=")[1].split(",")[0])
-        except:
-            print("File costfunction{:04.0f} not found".format(self.adxx_it))
+        except Exception as e:
+            print(f"Cost function didn't load: {e}")
 
     # Load adjoint files (assumes nz=1 for adxx vars)
     def load_vars(self, var_list="ALL"):
@@ -278,6 +278,7 @@ class Experiment():
                 # var_ds = xr.combine_by_coords([grid_ds,var_ds])
             else:
                 print("variable " + var + " not found in " + self.exp_dir)
+                continue
 
             datasets.append(var_ds.squeeze())
             del var_ds
@@ -323,7 +324,7 @@ class Experiment():
 
         print("Preparing to write netcdf to " + out_dir)
 
-        if "data" not in vars(self):
+        if not self.data:
             print("No data found, reading in data first")
             self.load_vars(var_list)
         else:
@@ -335,7 +336,7 @@ class Experiment():
                 load_list = [var for var in var_list if var not in self.data]
                 if not load_list == []:
                     print("Reading in " + str(load_list))
-                    self.load_vars(var_list)
+                    self.load_vars(load_list)
 
         print("All variables loaded, starting write")
         for var in var_list:
@@ -345,7 +346,7 @@ class Experiment():
                     file_name = "{}.{:010.0f}.nc".format(var, self.time_data["its"][it])
                     if label:
                        file_name=f"{label}_{file_name}"
-                    self.data[var].isel(time=it).to_netcdf(path=out_dir + file_name)
+                    self.data[var].isel(time=it).to_netcdf(path=os.path.join(out_dir,file_name))
             else:
                 file_name = "{}.nc".format(var)
                 if label:
@@ -382,7 +383,9 @@ class Experiment():
         """
         if proj_dict is None:
             proj_dict={"projection_type": "stereo", "lat_lim": -20}
-        grid_ds = xr.open_dataset(self.grid_dir + "ECCOv4r3_grid_with_masks.nc")
+        if plots_dir is None:
+            plots_dir='./'
+        grid_ds = xr.open_dataset(os.path.join(self.grid_dir,"ECCOv4r3_grid_with_masks.nc"))
         ad_mean = self.data.mean(dim=["i", "j", "i_g", "j_g", "tile"])
         ad_absmean = np.abs(self.data).mean(dim=["i", "j", "i_g", "j_g", "tile"])
         if "k" in ad_mean.dims:
@@ -430,6 +433,7 @@ class Experiment():
                     fontweight="bold",
                 )
             else:
+                clim = np.abs(self.data[var]).max().load() * 0.7
                 if "k" in self.data[var].dims:
                     [_, ax] = _plot_ecco(
                         grid_ds,
@@ -457,7 +461,7 @@ class Experiment():
             if save:
                 if not label:
                     label = self.exp_dir.split("/")[-2]
-                plt.savefig(plots_dir + label + "_" + var + ".png")
+                plt.savefig(os.path.join(plots_dir,f"{label}_{var}.png"))
 
     def calc_tseries(self, masks=None, save=True, var_list=None, label=None):
         """
@@ -565,7 +569,7 @@ class Experiment():
             def animate(i):
                 A = self.data[var].isel(time=-tsteps + i)
                 [_, ax] = _plot_ecco(
-                    grid_ds, A, cmin=-clims[var], cmax=clims[var], **proj_dict
+                    grid_ds, A, cmin=-clim, cmax=clim, **proj_dict, ax=ax
                 )
                 if axlims:
                     ax.set_extent(axlims, crs=ccrs.PlateCarree())
@@ -663,16 +667,15 @@ def _parse_vartype(vartype, ndims):
     elif isinstance(vartype, list):
         dims = vartype
     else:
-        print("Expecting a string or list for vartype")
+        raise ValueError("Expecting a string or list for vartype")
     return dims
 
 
 def _add_time_coords(var_ds, time_data):
     if len(var_ds.time)<len(time_data["dates"]):
         ndst=len(var_ds.time)
-        time_data["dates"] = time_data["dates"][-ndst:]
-        time_data["lag_days"] = time_data["lag_days"][-ndst:]
-        time_data["lag_years"] = time_data["lag_years"][-ndst:]
+        for tvar in time_data:
+            time_data[tvar] = time_data[tvar][-ndst:]
     var_ds["time"] = time_data["dates"].astype("datetime64[ns]")
     var_ds = var_ds.assign_coords(lag_days=("time", time_data["lag_days"]))
     var_ds = var_ds.assign_coords(lag_years=("time", time_data["lag_years"]))        
