@@ -128,7 +128,7 @@ class Experiment():
         alladxx = [
             os.path.basename(x)
             for x in glob.glob(
-                os.path.join(self.exp_dir,f"adxx_*{adxx_it:010.0f}.meta")
+                os.path.join(self.exp_dir,f"adxx_*{self.adxx_it:010.0f}.meta")
             )
         ]
         for item in alladxx:
@@ -141,7 +141,7 @@ class Experiment():
         print("Found {:d} adxx variables".format(len(self.adxx_vars)))
 
         # find costfunction value
-        costfunction = glob.glob(os.path.join(self.exp_dir,f"costfunction{adxx_it:04.0f}"))
+        costfunction = glob.glob(os.path.join(self.exp_dir,f"costfunction{self.adxx_it:04.0f}"))
         try:
             with open(costfunction[0], "r") as file:
                 fc = file.readline()  # Read first line formatted 'fc = [costfunction]'
