@@ -568,7 +568,7 @@ class Experiment():
 
             def animate(i):
                 A = self.data[var].isel(time=-tsteps + i)
-                [_, ax] = _plot_ecco(
+                _plot_ecco(
                     grid_ds, self.data[var].isel(time=0), cmin=-clim, cmax=clim, ax=ax, **proj_dict
                 )
                 plt.title(
