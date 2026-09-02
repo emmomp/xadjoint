@@ -548,10 +548,23 @@ class Experiment():
             var_list = list(self.data)
         if not label:
             label = self.exp_dir.split("/")[-2]
-        if proj_dict is None:
-            proj_dict ={"projection_type": "stereo", "lat_lim": -20}
         if plots_dir is None:
             plots_dir ='./'
+
+        plot_opts = {
+            "projection_type": "stereo",
+            "lat_lim": -20,
+            "dx": 1.0,
+            "dy": 1.0,
+            "plot_type": "pcolormesh",
+        }
+        if proj_dict:
+            plot_opts.update(proj_dict)
+
+        dx = plot_opts["dx"]
+        dy = plot_opts["dy"]
+        mapping_method = plot_opts.get("mapping_method", "nearest_neighbor")
+        radius = plot_opts.get("radius_of_influence", 112_000)
 
         for var in var_list:
             if not clims:
@@ -559,33 +572,54 @@ class Experiment():
             else:
                 clim = clims[var]
 
-            fig = plt.figure(figsize=[9, 5])
-            [_, ax] = _plot_ecco(
-                grid_ds, self.data[var].isel(time=0), cmin=-clim, cmax=clim, **proj_dict
+            data = self.data[var]
+            if "k" in data.dims:
+                data = data.mean("k")
+
+            nframes = min(tsteps, data.sizes["time"])
+            frames = data.isel(time=slice(-nframes, None))
+
+            # ECCO creates the requested Cartopy projection and the initial artist.
+            fig, ax, mesh, cbar, *_ = _plot_ecco(
+                grid_ds, frames.isel(time=0), cmin=-clim, cmax=clim, **plot_opts
             )
+
             if axlims:
                 ax.set_extent(axlims, crs=ccrs.PlateCarree())
 
+            lon_c, lat_c, lon_e, lat_e, projected = ecco.resample_to_latlon(
+                grid_ds.XC,
+                grid_ds.YC,
+                frames,
+                -90,
+                90,
+                dy,
+                -180,
+                180,
+                dx,
+                mapping_method=mapping_method,
+                radius_of_influence=radius,
+            )
+
             def animate(i):
-                A = self.data[var].isel(time=-tsteps + i)
-                _plot_ecco(
-                    grid_ds, self.data[var].isel(time=0), cmin=-clim, cmax=clim, ax=ax, **proj_dict
-                )
-                plt.title(
-                    "{}\n Lag = {:2.2f}y, {}".format(
-                        var, A.lag_years.data, A.time.dt.strftime("%Y-%m-%d").data
-                    )
+                frame = frames.isel(time=i)
+
+                mesh.set_array(np.asarray(projected[i]).ravel())
+                ax.set_title(
+                    f"{var}\nLag = {frame.lag_years.item():.2f}y, "
+                    f"{frame.time.dt.strftime('%Y-%m-%d').item()}"
                 )
                 if np.mod(i, 10) == 0:
                     print(i)
+                return (mesh,)
 
             # anim = animation.ArtistAnimation(fig, all_ims, interval=50, blit=False)
             anim = animation.FuncAnimation(
-                fig, animate, frames=tsteps - 1, interval=75, blit=False
+                fig, animate, frames=nframes, interval=75, blit=False
             )
             if not label:
                 label = self.exp_dir.split("/")[-2]
-            anim.save("{}{}_{}.gif".format(plots_dir, label, var))
+            anim.save(f"{plots_dir}{label}_{var}.gif")
             plt.show()
 
     # Calculate stats with optional sigma multiplier
@@ -681,13 +715,13 @@ def _add_time_coords(var_ds, time_data):
 
 
 def _plot_ecco(ecco_grid, dplot, cmap="RdBu_r", show_colorbar=True, **kwargs):
-    [p, ax] = ecco.plot_proj_to_latlon_grid(
+    fig, ax, mesh, cbar, *_ = ecco.plot_proj_to_latlon_grid(
         ecco_grid.XC,
         ecco_grid.YC,
         dplot,
         show_colorbar=show_colorbar,
         cmap=cmap,
         **kwargs
-    )[:2]
-    return [p, ax]
+    )
+    return [fig, ax, mesh, cbar]
 
