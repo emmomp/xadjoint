@@ -404,7 +404,7 @@ class Experiment():
                 peakt = ad_absmean[var].argmax(dim="time").load()
                 clim = np.abs(self.data[var].isel(time=peakt)).max().load() * 0.7
                 if "k" in self.data[var].dims:
-                    [_, ax] = _plot_ecco(
+                    _, ax, *_ = _plot_ecco(
                         grid_ds,
                         self.data[var].isel(time=peakt).mean("k"),
                         subplot_grid=[1, 2, 2],
@@ -418,7 +418,7 @@ class Experiment():
                         fontweight="bold",
                     )
                 else:
-                    [_, ax] = _plot_ecco(
+                    _, ax, *_ = _plot_ecco(
                         grid_ds,
                         self.data[var].isel(time=peakt),
                         subplot_grid=[1, 2, 2],
@@ -435,7 +435,7 @@ class Experiment():
             else:
                 clim = np.abs(self.data[var]).max().load() * 0.7
                 if "k" in self.data[var].dims:
-                    [_, ax] = _plot_ecco(
+                    _, ax, *_  = _plot_ecco(
                         grid_ds,
                         self.data[var].mean("k"),
                         **proj_dict,
@@ -448,7 +448,7 @@ class Experiment():
                         fontweight="bold",
                     )
                 else:
-                    [_, ax] = _plot_ecco(
+                    _, ax, *_ = _plot_ecco(
                         grid_ds,
                         self.data[var],
                         **proj_dict,
