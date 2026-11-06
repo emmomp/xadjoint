@@ -406,7 +406,8 @@ class Experiment():
                 if "k" in self.data[var].dims:
                     _, ax, *_ = _plot_ecco(
                         grid_ds,
-                        self.data[var].isel(time=peakt).mean("k"),
+   #                     self.data[var].isel(time=peakt).mean("k"),
+                        self.data[var].isel(time=peakt,k=0),
                         subplot_grid=[1, 2, 2],
                         **proj_dict,
                         cmin=-clim,
